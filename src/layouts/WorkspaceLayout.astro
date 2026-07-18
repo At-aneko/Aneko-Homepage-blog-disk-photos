@@ -1,0 +1,33 @@
+---
+import HeaderIsland from '../components/HeaderIsland.vue'
+import LeftSidebar from '../components/LeftSidebar.vue'
+import PageFooter from '../components/PageFooter.vue'
+import SiteLayout from './SiteLayout.astro'
+
+interface Props {
+  title: string
+  description: string
+  product: 'photos' | 'drive'
+  keywords?: string
+}
+
+const {
+  title,
+  description,
+  product,
+  keywords = 'Aneko,相册,云盘,Cloudflare,R2,KV',
+} = Astro.props
+---
+
+<SiteLayout title={title} description={description} keywords={keywords} loadingMode="app-entry">
+  <main class="at-main blogShell workspaceShell">
+    <LeftSidebar transition:persist="workspace-sidebar" />
+    <div class="at-right blogRight workspaceRight">
+      <HeaderIsland page={product} compact={false} blogSection="articles" client:load />
+      <div class="workspaceRouteContent" transition:name="workspace-content">
+        <slot />
+      </div>
+    </div>
+  </main>
+  <PageFooter client:load />
+</SiteLayout>

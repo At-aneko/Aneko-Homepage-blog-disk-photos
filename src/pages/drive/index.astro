@@ -1,0 +1,14 @@
+---
+import DriveShell from '../../components/DriveShell.vue'
+import WorkspaceLayout from '../../layouts/WorkspaceLayout.astro'
+
+export const prerender = false
+---
+
+<WorkspaceLayout
+  title="Aneko Drive - 云盘"
+  description="基于 Cloudflare R2 的内置文件浏览与管理页面。"
+  product="drive"
+>
+  <DriveShell client:load />
+</WorkspaceLayout>
