@@ -30,29 +30,29 @@
       <p>KV 中的照片清单还是空的。</p>
     </div>
 
-    <div v-else class="photoMasonry" aria-label="照片列表">
+    <div v-else ref="masonryRoot" class="photoMasonry" aria-label="照片列表">
       <article
         v-for="(photo, index) in photos"
-        :key="photo.id"
+        :key="photo.key"
         class="photoTile"
-        :style="{ '--photo-index': index }"
+        :style="{ '--photo-index': index % 12 }"
       >
-        <button type="button" @click="openPhoto(photo.id)">
+        <button
+          type="button"
+          :aria-label="photo.description || photo.title || `查看第 ${index + 1} 张照片`"
+          @click="openPhoto(photo.key)"
+        >
           <span class="photoMedia">
             <img
               :src="photo.images[0].src"
-              :alt="photo.description || photo.title"
+              :alt="photo.description || photo.title || '相册照片'"
               :loading="index < 6 ? 'eager' : 'lazy'"
               :fetchpriority="index < 3 ? 'high' : 'auto'"
               decoding="async"
-              @load="markLoaded(photo.id)"
-              @error="markLoaded(photo.id)"
+              @load="markLoaded(photo.key)"
+              @error="markLoaded(photo.key)"
             />
-            <span v-if="!loadedPhotos.has(photo.id)" class="photoTileSkeleton"></span>
-          </span>
-          <span class="photoCaption">
-            <span v-if="photo.date" class="photoDate">{{ photo.date }}</span>
-            <strong>{{ photo.description || photo.title }}</strong>
+            <span v-if="!loadedPhotos.has(photo.key)" class="photoTileSkeleton"></span>
           </span>
         </button>
       </article>
@@ -63,8 +63,10 @@
         <div v-if="activeImage" class="photoLightbox" role="dialog" aria-modal="true" aria-label="照片预览" @click.self="closeLightbox">
           <header class="photoLightboxTop">
             <div>
-              <span>{{ activeImage.photo.date || 'ANEKO PHOTOS' }}</span>
-              <strong>{{ activeImage.photo.description || activeImage.photo.title }}</strong>
+              <span v-if="activeImage.photo.date">{{ activeImage.photo.date }}</span>
+              <strong v-if="activeImage.photo.description || activeImage.photo.title">
+                {{ activeImage.photo.description || activeImage.photo.title }}
+              </strong>
             </div>
             <button type="button" title="关闭" aria-label="关闭照片预览" @click="closeLightbox">
               <X :size="20" :stroke-width="1.8" aria-hidden="true" />
@@ -83,7 +85,11 @@
           </button>
 
           <figure class="photoLightboxFigure">
-            <img :key="activeImage.image.src" :src="activeImage.image.src" :alt="activeImage.photo.description || activeImage.photo.title" />
+            <img
+              :key="activeImage.image.src"
+              :src="activeImage.image.src"
+              :alt="activeImage.photo.description || activeImage.photo.title || '相册照片'"
+            />
           </figure>
 
           <button
@@ -119,7 +125,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import {
   ChevronLeft,
   ChevronRight,
@@ -132,7 +138,6 @@ import {
 } from '@lucide/vue'
 
 interface RawPhoto {
-  id: string
   title?: string
   date?: string
   description?: string
@@ -145,7 +150,7 @@ interface GalleryImage {
 }
 
 interface GalleryPhoto {
-  id: string
+  key: string
   title: string
   date: string
   description: string
@@ -156,6 +161,7 @@ type GalleryStatus = 'loading' | 'ready' | 'empty' | 'error'
 
 const status = ref<GalleryStatus>('loading')
 const isMounted = ref(false)
+const masonryRoot = ref<HTMLElement | null>(null)
 const errorMessage = ref('')
 const photos = ref<GalleryPhoto[]>([])
 const loadedPhotos = ref(new Set<string>())
@@ -163,6 +169,9 @@ const activeImageIndex = ref(-1)
 const toastMessage = ref('')
 let abortController: AbortController | null = null
 let toastTimer: number | null = null
+let masonryFrame: number | null = null
+let masonryObserver: ResizeObserver | null = null
+let observedMasonryWidth = 0
 
 const flatImages = computed(() => photos.value.flatMap((photo) => (
   photo.images.map((image) => ({ photo, image }))
@@ -190,8 +199,8 @@ function normalizePhoto(photo: RawPhoto, index: number): GalleryPhoto | null {
   if (!images.length) return null
 
   return {
-    id: photo.id || `photo-${index + 1}`,
-    title: photo.title || photo.description || `Photo ${index + 1}`,
+    key: `${images[0].path}:${index}`,
+    title: photo.title || photo.description || '',
     date: photo.date || '',
     description: photo.description || photo.title || '',
     images,
@@ -201,6 +210,7 @@ function normalizePhoto(photo: RawPhoto, index: number): GalleryPhoto | null {
 async function loadPhotos() {
   abortController?.abort()
   abortController = new AbortController()
+  masonryObserver?.disconnect()
   status.value = 'loading'
   errorMessage.value = ''
 
@@ -215,6 +225,10 @@ async function loadPhotos() {
       .filter((photo): photo is GalleryPhoto => Boolean(photo))
     loadedPhotos.value = new Set()
     status.value = photos.value.length ? 'ready' : 'empty'
+    await nextTick()
+    observedMasonryWidth = 0
+    if (masonryRoot.value) masonryObserver?.observe(masonryRoot.value)
+    scheduleMasonryLayout()
   } catch (error) {
     if ((error as Error).name === 'AbortError') return
     status.value = 'error'
@@ -222,14 +236,32 @@ async function loadPhotos() {
   }
 }
 
-function markLoaded(photoId: string) {
-  const next = new Set(loadedPhotos.value)
-  next.add(photoId)
-  loadedPhotos.value = next
+function scheduleMasonryLayout() {
+  if (masonryFrame !== null) cancelAnimationFrame(masonryFrame)
+  masonryFrame = requestAnimationFrame(() => {
+    masonryFrame = null
+    const root = masonryRoot.value
+    if (!root) return
+
+    root.querySelectorAll<HTMLElement>('.photoTile').forEach((tile) => {
+      const image = tile.querySelector<HTMLImageElement>('img')
+      const width = tile.getBoundingClientRect().width
+      if (!image || !width) return
+      const ratio = image.naturalWidth > 0 ? image.naturalHeight / image.naturalWidth : 1
+      tile.style.gridRowEnd = `span ${Math.max(1, Math.ceil(width * ratio))}`
+    })
+  })
 }
 
-function openPhoto(photoId: string) {
-  const nextIndex = flatImages.value.findIndex((entry) => entry.photo.id === photoId)
+function markLoaded(photoKey: string) {
+  const next = new Set(loadedPhotos.value)
+  next.add(photoKey)
+  loadedPhotos.value = next
+  scheduleMasonryLayout()
+}
+
+function openPhoto(photoKey: string) {
+  const nextIndex = flatImages.value.findIndex((entry) => entry.photo.key === photoKey)
   if (nextIndex < 0) return
   activeImageIndex.value = nextIndex
   document.documentElement.style.overflow = 'hidden'
@@ -275,12 +307,20 @@ function handleKeydown(event: KeyboardEvent) {
 
 onMounted(() => {
   isMounted.value = true
+  masonryObserver = new ResizeObserver(([entry]) => {
+    const width = entry?.contentRect.width || 0
+    if (Math.abs(width - observedMasonryWidth) < 0.5) return
+    observedMasonryWidth = width
+    scheduleMasonryLayout()
+  })
   loadPhotos()
   window.addEventListener('keydown', handleKeydown)
 })
 
 onBeforeUnmount(() => {
   abortController?.abort()
+  masonryObserver?.disconnect()
+  if (masonryFrame !== null) cancelAnimationFrame(masonryFrame)
   window.removeEventListener('keydown', handleKeydown)
   document.documentElement.style.removeProperty('overflow')
   if (toastTimer !== null) window.clearTimeout(toastTimer)
@@ -367,38 +407,40 @@ onBeforeUnmount(() => {
   pointer-events: none;
 }
 
-.photoMasonry,
-.photoSkeletonGrid {
+.photoMasonry {
   padding-top: 14px;
-  columns: 4 220px;
-  column-gap: 12px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-auto-flow: row;
+  grid-auto-rows: 1px;
+  gap: 0;
 }
 
-.photoTile,
-.photoSkeletonGrid > span {
-  width: 100%;
-  margin: 0 0 12px;
-  break-inside: avoid;
-  overflow: hidden;
-  border: 1px solid var(--module_dock_border);
-  border-radius: 8px;
-  display: block;
-  background: var(--item_bg_color);
+.photoSkeletonGrid {
+  padding-top: 14px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-auto-flow: row;
+  grid-auto-rows: 60px;
+  gap: 0;
 }
 
 .photoTile {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: 0;
+  display: block;
+  grid-row-end: span 220;
+  background: var(--module_dock_inactive_bg);
   animation: photoReveal 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
   animation-delay: calc(var(--photo-index) * 45ms);
-  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s ease;
-}
-
-.photoTile:hover {
-  border-color: var(--module_dock_active_border);
-  transform: translateY(-3px);
 }
 
 .photoTile button {
   width: 100%;
+  height: 100%;
   padding: 0;
   border: 0;
   display: block;
@@ -410,6 +452,7 @@ onBeforeUnmount(() => {
 
 .photoMedia {
   position: relative;
+  height: 100%;
   display: block;
   overflow: hidden;
   background: var(--module_dock_inactive_bg);
@@ -417,8 +460,7 @@ onBeforeUnmount(() => {
 
 .photoMedia img {
   width: 100%;
-  height: auto;
-  min-height: 120px;
+  height: 100%;
   display: block;
   object-fit: cover;
   transition: filter 0.3s ease, transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
@@ -439,38 +481,16 @@ onBeforeUnmount(() => {
   animation: photoShimmer 1.4s ease-in-out infinite;
 }
 
-.photoCaption {
-  padding: 13px 14px 14px;
-  display: grid;
-  gap: 3px;
-}
-
-.photoCaption strong {
-  display: block;
-  overflow: hidden;
-  font-size: 12px;
-  font-weight: 500;
-  line-height: 18px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.photoDate {
-  font-size: 8px;
-  line-height: 12px;
-  opacity: 0.48;
-}
-
 .photoSkeletonGrid > span {
-  height: 280px;
+  min-width: 0;
+  grid-row: span 4;
   background: linear-gradient(100deg, var(--module_dock_inactive_bg) 20%, var(--item_hover_color) 45%, var(--module_dock_inactive_bg) 70%);
   background-size: 220% 100%;
   animation: photoShimmer 1.4s ease-in-out infinite;
 }
 
-.photoSkeletonGrid .shape-2 { height: 190px; }
-.photoSkeletonGrid .shape-3 { height: 340px; }
-.photoSkeletonGrid .shape-4 { height: 230px; }
+.photoSkeletonGrid .shape-2 { grid-row: span 3; }
+.photoSkeletonGrid .shape-3 { grid-row: span 5; }
 
 .workspaceState {
   min-height: 360px;
@@ -644,20 +664,17 @@ onBeforeUnmount(() => {
   }
 }
 
+@media (max-width: 1000px) {
+  .photoMasonry,
+  .photoSkeletonGrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
 @media (max-width: 640px) {
   .photoMasonry,
   .photoSkeletonGrid {
-    columns: 2;
-    column-gap: 9px;
-  }
-
-  .photoTile,
-  .photoSkeletonGrid > span {
-    margin-bottom: 9px;
-  }
-
-  .photoCaption {
-    padding: 10px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .photoLightbox {
@@ -673,7 +690,7 @@ onBeforeUnmount(() => {
 @media (max-width: 380px) {
   .photoMasonry,
   .photoSkeletonGrid {
-    columns: 1;
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
