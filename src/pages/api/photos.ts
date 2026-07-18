@@ -6,7 +6,6 @@ import { errorResponse, jsonResponse, successResponse } from '../../utils/http'
 export const prerender = false
 
 interface PhotoManifestItem {
-  id: string
   title?: string
   date?: string
   description?: string
@@ -17,8 +16,7 @@ function isManifest(value: unknown): value is PhotoManifestItem[] {
   return Array.isArray(value) && value.every((item) => {
     if (!item || typeof item !== 'object') return false
     const photo = item as Partial<PhotoManifestItem>
-    return typeof photo.id === 'string'
-      && Array.isArray(photo.images)
+    return Array.isArray(photo.images)
       && photo.images.every((image) => image && typeof image.img === 'string')
   })
 }
