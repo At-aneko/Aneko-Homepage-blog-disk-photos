@@ -532,11 +532,31 @@ onBeforeUnmount(() => {
 }
 
 .photoLightboxActions button,
-.photoLightboxActions a,
+.photoLightboxActions a {
+  border-color: rgba(247, 247, 248, 0.88);
+  color: #202126;
+  background: rgba(247, 247, 248, 0.92);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45);
+}
+
+.photoLightboxActions button:hover,
+.photoLightboxActions a:hover {
+  border-color: #f7f7f8;
+  color: #18191d;
+  background: #f7f7f8;
+}
+
+.photoLightboxActions button:focus-visible,
+.photoLightboxActions a:focus-visible,
+.photoLightboxNav:focus-visible {
+  outline: 2px solid #f7f7f8;
+  outline-offset: 3px;
+}
+
 .photoLightboxNav {
-  border-color: rgba(255, 255, 255, 0.14);
-  color: inherit;
-  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.28);
+  color: #f7f7f8;
+  background: rgba(255, 255, 255, 0.12);
 }
 
 .photoLightboxNav {
