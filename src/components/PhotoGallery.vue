@@ -61,18 +61,6 @@
     <Teleport v-if="isMounted" to="body">
       <Transition name="photo-lightbox">
         <div v-if="activeImage" class="photoLightbox" role="dialog" aria-modal="true" aria-label="照片预览" @click.self="closeLightbox">
-          <header class="photoLightboxTop">
-            <div>
-              <span v-if="activeImage.photo.date">{{ activeImage.photo.date }}</span>
-              <strong v-if="activeImage.photo.description || activeImage.photo.title">
-                {{ activeImage.photo.description || activeImage.photo.title }}
-              </strong>
-            </div>
-            <button type="button" title="关闭" aria-label="关闭照片预览" @click="closeLightbox">
-              <X :size="20" :stroke-width="1.8" aria-hidden="true" />
-            </button>
-          </header>
-
           <button
             class="photoLightboxNav is-prev"
             type="button"
@@ -84,7 +72,7 @@
             <ChevronLeft :size="22" :stroke-width="1.8" aria-hidden="true" />
           </button>
 
-          <figure class="photoLightboxFigure">
+          <figure class="photoLightboxFigure" @click.self="closeLightbox">
             <img
               :key="activeImage.image.src"
               :src="activeImage.image.src"
@@ -103,16 +91,16 @@
             <ChevronRight :size="22" :stroke-width="1.8" aria-hidden="true" />
           </button>
 
-          <footer class="photoLightboxActions">
-            <button type="button" title="复制链接" aria-label="复制照片链接" @click="shareActiveImage">
-              <Share2 :size="17" :stroke-width="1.8" aria-hidden="true" />
-            </button>
+          <footer class="photoLightboxActions" @click.self="closeLightbox">
+            <a :href="`${activeImage.image.src}?download`" download title="下载" aria-label="下载照片">
+              <Download :size="17" :stroke-width="1.8" aria-hidden="true" />
+            </a>
             <a :href="activeImage.image.src" target="_blank" rel="noreferrer" title="查看原图" aria-label="查看原图">
               <ExternalLink :size="17" :stroke-width="1.8" aria-hidden="true" />
             </a>
-            <a :href="`${activeImage.image.src}?download`" title="下载原图" aria-label="下载原图">
-              <Download :size="17" :stroke-width="1.8" aria-hidden="true" />
-            </a>
+            <button type="button" title="分享" aria-label="复制照片链接" @click="shareActiveImage">
+              <Share2 :size="17" :stroke-width="1.8" aria-hidden="true" />
+            </button>
           </footer>
 
           <Transition name="photo-toast">
@@ -134,7 +122,6 @@ import {
   Images,
   RefreshCw,
   Share2,
-  X,
 } from '@lucide/vue'
 
 interface RawPhoto {
@@ -242,13 +229,17 @@ function scheduleMasonryLayout() {
     masonryFrame = null
     const root = masonryRoot.value
     if (!root) return
+    const styles = getComputedStyle(root)
+    const rowHeight = Number.parseFloat(styles.gridAutoRows) || 1
+    const rowGap = Number.parseFloat(styles.rowGap) || 0
 
     root.querySelectorAll<HTMLElement>('.photoTile').forEach((tile) => {
       const image = tile.querySelector<HTMLImageElement>('img')
       const width = tile.getBoundingClientRect().width
       if (!image || !width) return
       const ratio = image.naturalWidth > 0 ? image.naturalHeight / image.naturalWidth : 1
-      tile.style.gridRowEnd = `span ${Math.max(1, Math.ceil(width * ratio))}`
+      const rowSpan = Math.ceil(((width * ratio) + rowGap) / (rowHeight + rowGap))
+      tile.style.gridRowEnd = `span ${Math.max(1, rowSpan)}`
     })
   })
 }
@@ -367,7 +358,6 @@ onBeforeUnmount(() => {
 }
 
 .photoGalleryStatus button,
-.photoLightboxTop button,
 .photoLightboxActions button,
 .photoLightboxActions a,
 .photoLightboxNav {
@@ -385,7 +375,6 @@ onBeforeUnmount(() => {
 }
 
 .photoGalleryStatus button:hover,
-.photoLightboxTop button:hover,
 .photoLightboxActions button:hover,
 .photoLightboxActions a:hover,
 .photoLightboxNav:hover {
@@ -394,7 +383,6 @@ onBeforeUnmount(() => {
 }
 
 .photoGalleryStatus button:active,
-.photoLightboxTop button:active,
 .photoLightboxActions button:active,
 .photoLightboxActions a:active,
 .photoLightboxNav:active {
@@ -413,7 +401,7 @@ onBeforeUnmount(() => {
   grid-template-columns: repeat(4, minmax(0, 1fr));
   grid-auto-flow: row;
   grid-auto-rows: 1px;
-  gap: 0;
+  gap: 4px;
 }
 
 .photoSkeletonGrid {
@@ -422,7 +410,7 @@ onBeforeUnmount(() => {
   grid-template-columns: repeat(4, minmax(0, 1fr));
   grid-auto-flow: row;
   grid-auto-rows: 60px;
-  gap: 0;
+  gap: 4px;
 }
 
 .photoTile {
@@ -534,47 +522,15 @@ onBeforeUnmount(() => {
   z-index: 99999;
   display: grid;
   grid-template-columns: 64px minmax(0, 1fr) 64px;
-  grid-template-rows: 72px minmax(0, 1fr) 72px;
+  grid-template-rows: minmax(0, 1fr) 72px;
   align-items: center;
   color: #f7f7f8;
   background: rgba(18, 19, 22, 0.97);
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
+  cursor: zoom-out;
 }
 
-.photoLightboxTop {
-  grid-column: 1 / -1;
-  grid-row: 1;
-  padding: 0 20px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 20px;
-}
-
-.photoLightboxTop > div {
-  min-width: 0;
-  display: grid;
-  gap: 2px;
-}
-
-.photoLightboxTop span {
-  font-size: 8px;
-  line-height: 12px;
-  opacity: 0.48;
-}
-
-.photoLightboxTop strong {
-  overflow: hidden;
-  font-size: 12px;
-  font-weight: 500;
-  line-height: 18px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.photoLightboxTop button,
 .photoLightboxActions button,
 .photoLightboxActions a,
 .photoLightboxNav {
@@ -590,14 +546,17 @@ onBeforeUnmount(() => {
   border-radius: 50%;
 }
 
-.photoLightboxNav.is-prev { grid-column: 1; grid-row: 2; }
-.photoLightboxNav.is-next { grid-column: 3; grid-row: 2; }
+.photoLightboxNav.is-prev { grid-column: 1; grid-row: 1; }
+.photoLightboxNav.is-next { grid-column: 3; grid-row: 1; }
 
 .photoLightboxFigure {
+  margin: 0;
+  padding: 20px 12px;
   min-width: 0;
   min-height: 0;
   grid-column: 2;
-  grid-row: 2;
+  grid-row: 1;
+  align-self: stretch;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -605,18 +564,19 @@ onBeforeUnmount(() => {
 
 .photoLightboxFigure img {
   max-width: 100%;
-  max-height: calc(100dvh - 176px);
+  max-height: calc(100dvh - 112px);
   border-radius: 8px;
   display: block;
   object-fit: contain;
   box-shadow: 0 24px 70px -34px rgba(0, 0, 0, 0.9);
+  cursor: default;
   user-select: none;
   -webkit-user-drag: none;
 }
 
 .photoLightboxActions {
   grid-column: 1 / -1;
-  grid-row: 3;
+  grid-row: 2;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -675,6 +635,7 @@ onBeforeUnmount(() => {
   .photoMasonry,
   .photoSkeletonGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 3px;
   }
 
   .photoLightbox {
@@ -704,7 +665,6 @@ onBeforeUnmount(() => {
   .photoTile,
   .photoMedia img,
   .photoGalleryStatus button,
-  .photoLightboxTop button,
   .photoLightboxActions button,
   .photoLightboxActions a,
   .photoLightboxNav {
