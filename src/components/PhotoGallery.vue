@@ -533,17 +533,17 @@ onBeforeUnmount(() => {
 
 .photoLightboxActions button,
 .photoLightboxActions a {
-  border-color: rgba(247, 247, 248, 0.88);
-  color: #202126;
-  background: rgba(247, 247, 248, 0.92);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45);
+  border-color: transparent;
+  color: rgba(247, 247, 248, 0.82);
+  background: transparent;
+  box-shadow: none;
 }
 
 .photoLightboxActions button:hover,
 .photoLightboxActions a:hover {
-  border-color: #f7f7f8;
-  color: #18191d;
-  background: #f7f7f8;
+  border-color: transparent;
+  color: #f7f7f8;
+  background: rgba(255, 255, 255, 0.12);
 }
 
 .photoLightboxActions button:focus-visible,
@@ -595,12 +595,22 @@ onBeforeUnmount(() => {
 }
 
 .photoLightboxActions {
+  width: max-content;
+  min-height: 48px;
+  padding: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
   grid-column: 1 / -1;
   grid-row: 2;
+  justify-self: center;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 2px;
+  background: rgba(30, 31, 35, 0.88);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
 }
 
 .photoToast {
