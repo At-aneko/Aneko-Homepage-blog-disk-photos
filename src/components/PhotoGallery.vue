@@ -91,7 +91,7 @@
             <ChevronRight :size="22" :stroke-width="1.8" aria-hidden="true" />
           </button>
 
-          <footer class="photoLightboxActions" @click.self="closeLightbox">
+          <div class="photoLightboxActions" role="toolbar" aria-label="照片操作" @click.self="closeLightbox">
             <a :href="`${activeImage.image.src}?download`" download title="下载" aria-label="下载照片">
               <Download :size="17" :stroke-width="1.8" aria-hidden="true" />
             </a>
@@ -101,7 +101,7 @@
             <button type="button" title="分享" aria-label="复制照片链接" @click="shareActiveImage">
               <Share2 :size="17" :stroke-width="1.8" aria-hidden="true" />
             </button>
-          </footer>
+          </div>
 
           <Transition name="photo-toast">
             <div v-if="toastMessage" class="photoToast" role="status">{{ toastMessage }}</div>
