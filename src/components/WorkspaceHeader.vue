@@ -41,12 +41,12 @@ const products = {
   photos: {
     name: 'Photos',
     kicker: 'ANEKO / FRAMES',
-    copy: '从这取回光影与片刻。',
+    copy: '从相册取回光影与片刻',
   },
   drive: {
     name: 'Drive',
     kicker: 'ANEKO / STORAGE',
-    copy: '文件、目录与归档。',
+    copy: '文件、目录与归档',
   },
 }
 
