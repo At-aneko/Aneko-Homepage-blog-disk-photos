@@ -14,7 +14,7 @@ if (!tagEntry) Astro.response.status = 404
 
 <BlogLayout
   title={`#${tag} - Aneko Blog`}
-  description={tagEntry ? `Aneko Blog 中带有 ${tag} 标签的文章。` : '未找到该文章标签。'}
+  description={tagEntry ? `Aneko Blog 中带有 ${tag} 标签的文章` : '未找到该文章标签'}
   compactHeader
 >
   <section class="blogIndex blogListingPage" aria-labelledby="tag-page-title">
@@ -30,7 +30,7 @@ if (!tagEntry) Astro.response.status = 404
     ) : (
       <div class="blogEmptyState">
         <h2>没有可显示的文章</h2>
-        <p>返回文章列表浏览其他内容。</p>
+        <p>返回文章列表浏览其他内容</p>
       </div>
     )}
   </section>
