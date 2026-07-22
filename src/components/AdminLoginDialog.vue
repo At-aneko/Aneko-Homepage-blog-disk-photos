@@ -1,5 +1,5 @@
 <template>
-  <Teleport to="body">
+  <Teleport v-if="isMounted" to="body">
     <Transition name="admin-dialog">
       <div
         v-if="open"
@@ -43,7 +43,7 @@
 </template>
 
 <script setup lang="ts">
-import { nextTick, ref, watch } from 'vue'
+import { nextTick, onMounted, ref, watch } from 'vue'
 import { LockKeyhole, X } from '@lucide/vue'
 import { storeAdminAccess, verifyAdminAccess } from '../utils/admin-client'
 
@@ -57,6 +57,11 @@ const code = ref('')
 const error = ref('')
 const submitting = ref(false)
 const input = ref<HTMLInputElement | null>(null)
+const isMounted = ref(false)
+
+onMounted(() => {
+  isMounted.value = true
+})
 
 watch(() => props.open, async (open) => {
   if (!open) return
