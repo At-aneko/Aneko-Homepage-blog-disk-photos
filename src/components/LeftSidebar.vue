@@ -37,7 +37,7 @@
       <ul id="line">
         <li>
           <div class="focus"></div>
-          <div>整合所有页面，添加完整后端<br/>全面完善主页</div>
+          <div>添加完整后端<br/>全面整合完善主页</div>
           <div>2026.7</div>
         </li>
         <li>
