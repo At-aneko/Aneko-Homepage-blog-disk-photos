@@ -4,6 +4,7 @@ import { BLOG_BODY_PREFIX, BLOG_META_PREFIX, getBindings } from '../../../../uti
 import { errorResponse, successResponse } from '../../../../utils/http'
 import {
   calculateReadingTime,
+  getStoredPostMetadata,
   getStoredPostIndex,
   saveStoredPostIndex,
   type StoredBlogPost,
@@ -12,6 +13,7 @@ import {
 export const prerender = false
 
 const SLUG_PATTERN = /^[\p{L}\p{N}]+(?:-[\p{L}\p{N}]+)*$/u
+const RESERVED_SLUGS = new Set(['about', 'archive', 'assets', 'page', 'tag'])
 const MAX_ARTICLE_BYTES = 2 * 1024 * 1024
 
 interface BlogPostInput {
@@ -49,11 +51,33 @@ async function isAuthorized(request: Request) {
   return verifyAccessCode(request.headers.get('X-Access-Code'), bindings.ACCESS_CODE)
 }
 
+function isValidSlug(slug: string) {
+  return SLUG_PATTERN.test(slug) && !RESERVED_SLUGS.has(slug.toLocaleLowerCase('zh-CN'))
+}
+
+export const GET: APIRoute = async ({ params, request }) => {
+  if (!await isAuthorized(request)) return errorResponse('Unauthorized', 401)
+
+  const slug = params.slug?.trim() || ''
+  if (!isValidSlug(slug)) return errorResponse('Invalid article slug')
+
+  const metadata = await getStoredPostMetadata(slug)
+  if (!metadata) return errorResponse('Article not found', 404)
+
+  const bodyObject = await getBindings().ANEKO_R2.get(metadata.bodyKey)
+  if (!bodyObject) return errorResponse('Article body not found', 404)
+
+  return successResponse({
+    ...metadata,
+    body: await bodyObject.text(),
+  })
+}
+
 export const PUT: APIRoute = async ({ params, request }) => {
   if (!await isAuthorized(request)) return errorResponse('Unauthorized', 401)
 
   const slug = params.slug?.trim() || ''
-  if (!SLUG_PATTERN.test(slug)) return errorResponse('Invalid article slug')
+  if (!isValidSlug(slug)) return errorResponse('Invalid article slug')
 
   const declaredLength = Number(request.headers.get('Content-Length') || 0)
   if (declaredLength > MAX_ARTICLE_BYTES) return errorResponse('Article is too large', 413)
@@ -112,14 +136,26 @@ export const DELETE: APIRoute = async ({ params, request }) => {
   if (!await isAuthorized(request)) return errorResponse('Unauthorized', 401)
 
   const slug = params.slug?.trim() || ''
-  if (!SLUG_PATTERN.test(slug)) return errorResponse('Invalid article slug')
+  if (!isValidSlug(slug)) return errorResponse('Invalid article slug')
 
   const bindings = getBindings()
   const index = await getStoredPostIndex()
   const existing = index.find((post) => post.slug === slug)
 
+  const assetKeys: string[] = []
+  let cursor: string | undefined
+  do {
+    const result = await bindings.ANEKO_R2.list({
+      prefix: `blog/assets/${slug}/`,
+      cursor,
+    })
+    assetKeys.push(...result.objects.map((object) => object.key))
+    cursor = result.truncated ? result.cursor : undefined
+  } while (cursor)
+
   await Promise.all([
     bindings.ANEKO_R2.delete(existing?.bodyKey || `${BLOG_BODY_PREFIX}${slug}.md`),
+    assetKeys.length ? bindings.ANEKO_R2.delete(assetKeys) : Promise.resolve(),
     bindings.ANEKO_KV.delete(`${BLOG_META_PREFIX}${slug}`),
     saveStoredPostIndex(index.filter((post) => post.slug !== slug)),
   ])
