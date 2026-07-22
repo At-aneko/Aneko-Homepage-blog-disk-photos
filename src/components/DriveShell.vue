@@ -236,6 +236,13 @@ import {
   Upload,
   X,
 } from '@lucide/vue'
+import {
+  apiRequest,
+  clearAdminAccess,
+  restoreAdminAccess,
+  storeAdminAccess,
+  verifyAdminAccess,
+} from '../utils/admin-client'
 
 interface DriveFile {
   key: string
@@ -243,12 +250,6 @@ interface DriveFile {
   lastModified: string
   isFolder: boolean
   etag?: string
-}
-
-interface ApiEnvelope<T> {
-  success: boolean
-  data?: T
-  error?: string
 }
 
 type DriveStatus = 'loading' | 'ready' | 'error'
@@ -290,23 +291,6 @@ const sortedFiles = computed(() => [...files.value].sort((a, b) => {
   if (a.isFolder !== b.isFolder) return a.isFolder ? -1 : 1
   return displayName(a).localeCompare(displayName(b), 'zh-CN')
 }))
-
-async function apiRequest<T>(path: string, options?: RequestInit): Promise<T> {
-  const response = await fetch(path, options)
-  let payload: ApiEnvelope<T>
-
-  try {
-    payload = await response.json()
-  } catch {
-    throw new Error(`HTTP ${response.status}`)
-  }
-
-  if (!response.ok || !payload.success || payload.data === undefined) {
-    throw new Error(payload.error || `HTTP ${response.status}`)
-  }
-
-  return payload.data
-}
 
 async function loadFiles() {
   listController?.abort()
@@ -425,15 +409,10 @@ async function submitAuth() {
   authSubmitting.value = true
   authError.value = ''
   try {
-    const result = await apiRequest<{ valid: boolean }>('/api/drive/auth', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code: authCodeInput.value }),
-    })
-    if (!result.valid) throw new Error('访问码不正确')
+    if (!await verifyAdminAccess(authCodeInput.value)) throw new Error('访问码不正确')
     accessCode.value = authCodeInput.value
     isAuthenticated.value = true
-    sessionStorage.setItem('aneko-drive-access', accessCode.value)
+    storeAdminAccess(accessCode.value)
     showAuthDialog.value = false
     showNotice('管理员登录成功')
   } catch (error) {
@@ -446,7 +425,7 @@ async function submitAuth() {
 function logout() {
   accessCode.value = ''
   isAuthenticated.value = false
-  sessionStorage.removeItem('aneko-drive-access')
+  clearAdminAccess()
   showNotice('已退出管理员')
 }
 
@@ -605,24 +584,10 @@ function closePreview() {
 onMounted(async () => {
   isMounted.value = true
   loadFiles()
-  const savedCode = sessionStorage.getItem('aneko-drive-access') || ''
+  const savedCode = await restoreAdminAccess()
   if (!savedCode) return
-
-  try {
-    const result = await apiRequest<{ valid: boolean }>('/api/drive/auth', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code: savedCode }),
-    })
-    if (result.valid) {
-      accessCode.value = savedCode
-      isAuthenticated.value = true
-    } else {
-      sessionStorage.removeItem('aneko-drive-access')
-    }
-  } catch {
-    sessionStorage.removeItem('aneko-drive-access')
-  }
+  accessCode.value = savedCode
+  isAuthenticated.value = true
 })
 
 onBeforeUnmount(() => {

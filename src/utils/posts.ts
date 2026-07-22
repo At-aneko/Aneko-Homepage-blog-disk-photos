@@ -53,6 +53,22 @@ function isStoredBlogPost(value: unknown): value is StoredBlogPost {
     && Array.isArray(post.tags)
 }
 
+export async function getStoredPostMetadata(slug: string) {
+  const bindings = getBindings()
+  const rawMetadata = await bindings.ANEKO_KV.get(`${BLOG_META_PREFIX}${slug}`)
+
+  if (rawMetadata) {
+    try {
+      const parsed = JSON.parse(rawMetadata)
+      if (isStoredBlogPost(parsed)) return parsed
+    } catch {
+      // Fall back to the index for metadata written before per-post keys existed.
+    }
+  }
+
+  return (await getStoredPostIndex()).find((post) => post.slug === slug) ?? null
+}
+
 function normalizeStoredPost(post: StoredBlogPost): BlogPost | null {
   const pubDate = new Date(post.pubDate)
   if (Number.isNaN(pubDate.valueOf())) return null
@@ -105,21 +121,7 @@ export async function getPublishedPosts() {
 
 export async function getBlogPost(slug: string) {
   const bindings = getBindings()
-  const rawMetadata = await bindings.ANEKO_KV.get(`${BLOG_META_PREFIX}${slug}`)
-  let storedPost: StoredBlogPost | undefined
-
-  if (rawMetadata) {
-    try {
-      const parsed = JSON.parse(rawMetadata)
-      if (isStoredBlogPost(parsed)) storedPost = parsed
-    } catch {
-      storedPost = undefined
-    }
-  }
-
-  if (!storedPost) {
-    storedPost = (await getStoredPostIndex()).find((post) => post.slug === slug)
-  }
+  const storedPost = await getStoredPostMetadata(slug)
 
   if (!storedPost || storedPost.draft) return null
 

@@ -2,6 +2,7 @@ import type { APIRoute } from 'astro'
 import { verifyAccessCode } from '../../utils/auth'
 import { getBindings, getPhotoManifestKey } from '../../utils/cloudflare'
 import { errorResponse, jsonResponse, successResponse } from '../../utils/http'
+import { normalizeObjectPath } from '../../utils/r2'
 
 export const prerender = false
 
@@ -16,8 +17,20 @@ function isManifest(value: unknown): value is PhotoManifestItem[] {
   return Array.isArray(value) && value.every((item) => {
     if (!item || typeof item !== 'object') return false
     const photo = item as Partial<PhotoManifestItem>
-    return Array.isArray(photo.images)
-      && photo.images.every((image) => image && typeof image.img === 'string')
+    if (photo.title !== undefined && typeof photo.title !== 'string') return false
+    if (photo.date !== undefined && typeof photo.date !== 'string') return false
+    if (photo.description !== undefined && typeof photo.description !== 'string') return false
+    if (!Array.isArray(photo.images)) return false
+
+    return photo.images.every((image) => {
+      if (!image || typeof image.img !== 'string' || !image.img.trim()) return false
+      try {
+        const normalized = normalizeObjectPath(image.img.trim())
+        return normalized === image.img.trim() && !normalized.startsWith('photos/')
+      } catch {
+        return false
+      }
+    })
   })
 }
 
