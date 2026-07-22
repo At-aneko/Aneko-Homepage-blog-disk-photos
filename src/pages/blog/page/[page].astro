@@ -2,11 +2,10 @@
 import BlogPagination from '../../../components/BlogPagination.astro'
 import BlogPostList from '../../../components/BlogPostList.astro'
 import BlogLayout from '../../../layouts/BlogLayout.astro'
-import { getPublishedPosts } from '../../../utils/posts'
+import { getPublishedPosts, POSTS_PER_PAGE } from '../../../utils/posts'
 
 export const prerender = false
 
-const POSTS_PER_PAGE = 6
 const currentPage = Number.parseInt(Astro.params.page || '', 10)
 if (!Number.isInteger(currentPage) || currentPage < 2) return Astro.redirect('/blog/')
 
