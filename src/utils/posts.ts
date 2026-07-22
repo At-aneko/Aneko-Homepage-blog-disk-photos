@@ -1,5 +1,7 @@
 import { BLOG_META_PREFIX, getBindings, getBlogIndexKey } from './cloudflare'
 
+export const POSTS_PER_PAGE = 6
+
 export interface StoredBlogPost {
   slug: string
   title: string

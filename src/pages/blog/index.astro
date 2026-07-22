@@ -2,11 +2,10 @@
 import BlogPagination from '../../components/BlogPagination.astro'
 import BlogPostList from '../../components/BlogPostList.astro'
 import BlogLayout from '../../layouts/BlogLayout.astro'
-import { formatPostDate, getPublishedPosts, getReadingTime, getTagEntries } from '../../utils/posts'
+import { formatPostDate, getPublishedPosts, getReadingTime, getTagEntries, POSTS_PER_PAGE } from '../../utils/posts'
 
 export const prerender = false
 
-const POSTS_PER_PAGE = 6
 const allPosts = await getPublishedPosts()
 const pagePosts = allPosts.slice(0, POSTS_PER_PAGE)
 const featuredPost = pagePosts.find((post) => post.data.featured) ?? pagePosts[0]
