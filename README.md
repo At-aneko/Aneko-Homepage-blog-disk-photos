@@ -1,6 +1,6 @@
 # Aneko Homepage
 
-Aneko Homepage 是基于 Astro 7、Vue 3 和 Cloudflare Workers 构建的个人站点，包含主页、博客、相册和公开网盘。博客、相册和网盘均可直接在网站中管理，日常使用不需要手工调用接口或进入 Cloudflare 后台修改数据。
+Aneko Homepage 是参考zyyo主页风格，基于 Astro 7、Vue 3 和 Cloudflare Workers 构建的个人站点，包含主页、博客、相册和公开网盘。博客、相册和网盘均可直接在网站中管理，日常使用不需要手工调用接口或进入 Cloudflare 后台修改数据。
 
 - 演示站点：[www.aneko.ink](https://www.aneko.ink)
 - 源码仓库：[At-aneko/Aneko-Homepage-blog-disk-photos](https://github.com/At-aneko/Aneko-Homepage-blog-disk-photos)
