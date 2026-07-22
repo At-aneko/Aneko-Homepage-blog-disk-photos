@@ -176,41 +176,6 @@ R2 中的 `blog/posts/<slug>.md` 只保存 Markdown 正文，不包含 YAML fron
 
 R2 本身没有空目录，因此创建文件夹时会写入 `drive/<folder>/.keep` 占位对象，列表中不会显示该对象。不要把真实文件命名为 `.keep`。
 
-## 本地开发
-
-环境要求：
-
-- Node.js `>=22.12.0`
-- pnpm
-
-安装依赖：
-
-```bash
-pnpm install
-```
-
-复制 `.dev.vars.example` 为 `.dev.vars`，并设置本地管理员访问码：
-
-```dotenv
-ACCESS_CODE=replace-with-a-local-admin-code
-```
-
-启动开发服务器：
-
-```bash
-pnpm dev
-```
-
-Astro 的 Cloudflare 适配器会在本地持久化模拟的 KV/R2 状态。开发数据与生产环境数据相互独立。
-
-## 检查与构建
-
-```bash
-pnpm check
-pnpm build
-```
-
-`pnpm check` 执行 Astro 和 TypeScript 检查，`pnpm build` 将 Cloudflare Worker 与静态资源输出到 `dist/`。
 
 ## 部署
 
@@ -222,13 +187,6 @@ pnpm build
 4. 保留或按需修改 `BLOG_INDEX_KEY`、`PHOTO_MANIFEST_KEY` 和 `DRIVE_PREFIX`。
 5. 将自定义域名绑定到 Worker。
 
-通过 Wrangler 手动部署：
-
-```bash
-pnpm deploy
-```
-
-Wrangler 必须已登录，且部署环境中已经配置实际 R2/KV 绑定。若 Cloudflare 已连接本 GitHub 仓库，推送到部署分支后也可以由 Git 集成自动构建和发布；当前生产域名为 `www.aneko.ink`。
 
 ## 项目结构
 
