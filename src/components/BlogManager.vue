@@ -108,7 +108,7 @@
 
     <AdminLoginDialog :open="showLogin" @close="showLogin = false" @authenticated="handleAuthenticated" />
 
-    <Teleport to="body">
+    <Teleport v-if="isMounted" to="body">
       <Transition name="manager-editor">
         <div
           v-if="editorOpen"
@@ -309,6 +309,7 @@ const RESERVED_SLUGS = new Set(['about', 'archive', 'assets', 'page', 'tag'])
 const SLUG_PATTERN = /^[\p{L}\p{N}]+(?:-[\p{L}\p{N}]+)*$/u
 
 const posts = ref<StoredBlogPost[]>([])
+const isMounted = ref(false)
 const assets = ref<BlogAsset[]>([])
 const accessCode = ref('')
 const isAuthenticated = computed(() => Boolean(accessCode.value))
@@ -704,6 +705,7 @@ watch(editorOpen, (open) => {
 })
 
 onMounted(async () => {
+  isMounted.value = true
   accessCode.value = await restoreAdminAccess()
   authChecking.value = false
   if (accessCode.value) await loadPosts()
