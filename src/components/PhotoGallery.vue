@@ -115,13 +115,8 @@
       <span>{{ isAuthenticated ? '释放以上传照片' : '请先登录管理员' }}</span>
     </div>
 
-    <div v-if="pageBarVisible" class="photoScrollbar" :style="{ left: `${pageBarLeft}px` }" @mousedown="handleTrackDown">
-      <div
-        class="photoScrollbarThumb"
-        :class="{ 'is-dragging': pageBarDragging }"
-        :style="{ height: `${pageBarThumbH}px`, transform: `translateY(${pageBarThumbY}px)` }"
-        @mousedown.stop.prevent="handleThumbDown"
-      ></div>
+    <div v-if="pageBarVisible" class="photoScrollbar" :style="{ left: `${pageBarLeft}px` }" aria-hidden="true">
+      <div class="photoScrollbarThumb" :style="{ height: `${pageBarThumbH}px`, transform: `translateY(${pageBarThumbY}px)` }"></div>
     </div>
 
     <AdminLoginDialog :open="showLogin" @close="showLogin = false" @authenticated="handleAuthenticated" />
@@ -664,16 +659,11 @@ function handleKeydown(event: KeyboardEvent) {
   if (event.key === 'ArrowRight') moveLightbox(1)
 }
 
-const PAGE_BAR_MARGIN = 12
 const pageBarVisible = ref(false)
 const pageBarLeft = ref(0)
 const pageBarThumbH = ref(0)
 const pageBarThumbY = ref(0)
-const pageBarDragging = ref(false)
-let pageBarTrackH = 0
 let pageBarFrame: number | null = null
-let pageBarDragStartY = 0
-let pageBarDragStartScroll = 0
 let pageBodyObserver: ResizeObserver | null = null
 
 function updatePageBar() {
@@ -686,12 +676,13 @@ function updatePageBar() {
     return
   }
   pageBarLeft.value = Math.round(Math.min(masonry.getBoundingClientRect().right + 6, window.innerWidth - 16))
-  pageBarTrackH = viewportH - PAGE_BAR_MARGIN * 2
-  const thumbH = Math.max(44, pageBarTrackH * (viewportH / scrollH))
+  // 与样式里 height: min(420px, 60vh) 保持一致
+  const trackH = Math.min(420, viewportH * 0.6)
+  const thumbH = Math.max(36, trackH * (viewportH / scrollH))
   const maxScroll = scrollH - viewportH
   const progress = maxScroll > 0 ? Math.min(1, Math.max(0, (window.scrollY || doc.scrollTop) / maxScroll)) : 0
   pageBarThumbH.value = Math.round(thumbH)
-  pageBarThumbY.value = Math.round((pageBarTrackH - thumbH) * progress)
+  pageBarThumbY.value = Math.round((trackH - thumbH) * progress)
   pageBarVisible.value = true
 }
 
@@ -701,36 +692,6 @@ function schedulePageBar() {
     pageBarFrame = null
     updatePageBar()
   })
-}
-
-function handleThumbDown(event: MouseEvent) {
-  pageBarDragging.value = true
-  pageBarDragStartY = event.clientY
-  pageBarDragStartScroll = window.scrollY || document.documentElement.scrollTop
-  window.addEventListener('mousemove', handleThumbMove)
-  window.addEventListener('mouseup', handleThumbUp)
-}
-
-function handleThumbMove(event: MouseEvent) {
-  const maxScroll = document.documentElement.scrollHeight - window.innerHeight
-  const trackRange = pageBarTrackH - pageBarThumbH.value
-  if (trackRange <= 0 || maxScroll <= 0) return
-  const delta = (event.clientY - pageBarDragStartY) * (maxScroll / trackRange)
-  window.scrollTo(0, pageBarDragStartScroll + delta)
-}
-
-function handleThumbUp() {
-  pageBarDragging.value = false
-  window.removeEventListener('mousemove', handleThumbMove)
-  window.removeEventListener('mouseup', handleThumbUp)
-}
-
-function handleTrackDown(event: MouseEvent) {
-  const maxScroll = document.documentElement.scrollHeight - window.innerHeight
-  const trackRange = pageBarTrackH - pageBarThumbH.value
-  if (trackRange <= 0 || maxScroll <= 0) return
-  const progress = Math.min(1, Math.max(0, (event.clientY - PAGE_BAR_MARGIN - pageBarThumbH.value / 2) / trackRange))
-  window.scrollTo(0, progress * maxScroll)
 }
 
 onMounted(async () => {
@@ -760,7 +721,6 @@ onBeforeUnmount(() => {
   window.removeEventListener('resize', schedulePageBar)
   pageBodyObserver?.disconnect()
   if (pageBarFrame !== null) cancelAnimationFrame(pageBarFrame)
-  handleThumbUp()
   document.documentElement.style.removeProperty('overflow')
   if (toastTimer !== null) window.clearTimeout(toastTimer)
   if (operationTimer !== null) window.clearTimeout(operationTimer)
@@ -872,30 +832,20 @@ onBeforeUnmount(() => {
 
 .photoScrollbar {
   position: fixed;
-  top: 12px;
-  bottom: 12px;
+  top: 50%;
+  height: min(420px, 60vh);
   width: 8px;
   z-index: 60;
   border-radius: 999px;
   background: rgba(37, 42, 50, 0.1);
-  cursor: pointer;
+  transform: translateY(-50%);
+  pointer-events: none;
 }
 
 .photoScrollbarThumb {
   width: 100%;
   border-radius: 999px;
   background: rgba(37, 42, 50, 0.38);
-  cursor: grab;
-  transition: background-color 0.2s ease;
-}
-
-.photoScrollbarThumb:hover,
-.photoScrollbarThumb.is-dragging {
-  background: rgba(37, 42, 50, 0.56);
-}
-
-.photoScrollbarThumb.is-dragging {
-  cursor: grabbing;
 }
 
 [data-theme='Dark'] .photoScrollbar {
@@ -904,11 +854,6 @@ onBeforeUnmount(() => {
 
 [data-theme='Dark'] .photoScrollbarThumb {
   background: rgba(255, 255, 255, 0.3);
-}
-
-[data-theme='Dark'] .photoScrollbarThumb:hover,
-[data-theme='Dark'] .photoScrollbarThumb.is-dragging {
-  background: rgba(255, 255, 255, 0.46);
 }
 
 @media (max-width: 800px) {
