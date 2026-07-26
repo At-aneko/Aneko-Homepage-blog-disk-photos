@@ -775,11 +775,50 @@ onBeforeUnmount(() => {
 
 .photoMasonry {
   padding-top: 14px;
+  padding-right: 8px;
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   grid-auto-flow: row;
   grid-auto-rows: 1px;
   gap: 4px;
+  max-height: calc(100vh - 150px);
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(37, 42, 50, 0.35) rgba(37, 42, 50, 0.08);
+}
+
+.photoMasonry::-webkit-scrollbar {
+  width: 8px;
+}
+
+.photoMasonry::-webkit-scrollbar-track {
+  border-radius: 4px;
+  background: rgba(37, 42, 50, 0.08);
+}
+
+.photoMasonry::-webkit-scrollbar-thumb {
+  border-radius: 4px;
+  background: rgba(37, 42, 50, 0.35);
+}
+
+.photoMasonry::-webkit-scrollbar-thumb:hover {
+  background: rgba(37, 42, 50, 0.5);
+}
+
+[data-theme='Dark'] .photoMasonry {
+  scrollbar-color: rgba(255, 255, 255, 0.28) rgba(255, 255, 255, 0.06);
+}
+
+[data-theme='Dark'] .photoMasonry::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+[data-theme='Dark'] .photoMasonry::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.28);
+}
+
+[data-theme='Dark'] .photoMasonry::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.42);
 }
 
 .photoSkeletonGrid {
