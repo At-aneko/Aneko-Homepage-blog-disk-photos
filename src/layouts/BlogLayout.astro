@@ -21,7 +21,13 @@ const {
 } = Astro.props
 ---
 
-<SiteLayout title={title} description={description} keywords={keywords} loadingMode="blog-entry">
+<SiteLayout
+  title={title}
+  description={description}
+  keywords={keywords}
+  loadingMode="blog-entry"
+  breadcrumb={{ name: '博客', path: '/blog/' }}
+>
   <script>
     import '../scripts/blog-code-blocks.js'
     import '../scripts/github-cards.js'

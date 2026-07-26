@@ -21,7 +21,7 @@ if (!post) Astro.response.status = 404
 ---
 
 <BlogLayout
-  title={post ? `${post.data.title} - Aneko Blog` : '文章未找到 - Aneko Blog'}
+  title={post ? `${post.data.title} - Aneko` : '文章未找到 - Aneko'}
   description={post?.data.description || '未找到请求的博客文章。'}
   keywords={post ? `Aneko,个人博客,${post.data.tags.join(',')}` : 'Aneko,个人博客'}
   compactHeader

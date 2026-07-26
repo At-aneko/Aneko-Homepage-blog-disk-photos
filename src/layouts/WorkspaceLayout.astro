@@ -17,9 +17,19 @@ const {
   product,
   keywords = 'Aneko,相册,云盘,Cloudflare,R2,KV',
 } = Astro.props
+
+const breadcrumb = product === 'photos'
+  ? { name: '相册', path: '/photos/' }
+  : { name: '云盘', path: '/drive/' }
 ---
 
-<SiteLayout title={title} description={description} keywords={keywords} loadingMode="app-entry">
+<SiteLayout
+  title={title}
+  description={description}
+  keywords={keywords}
+  loadingMode="app-entry"
+  breadcrumb={breadcrumb}
+>
   <main class="at-main blogShell workspaceShell">
     <LeftSidebar transition:persist="workspace-sidebar" />
     <div class="at-right blogRight workspaceRight">
