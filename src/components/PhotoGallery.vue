@@ -115,12 +115,12 @@
       <span>{{ isAuthenticated ? '释放以上传照片' : '请先登录管理员' }}</span>
     </div>
 
-    <div v-if="pageBarVisible" class="photoScrollbar" :style="{ left: `${pageBarLeft}px` }" @mousedown="handleTrackDown">
+    <div v-if="pageBarVisible" class="photoScrollbar" :style="{ left: `${pageBarLeft}px` }" @pointerdown="handleTrackDown">
       <div
         class="photoScrollbarThumb"
         :class="{ 'is-dragging': pageBarDragging }"
         :style="{ height: `${pageBarThumbH}px`, transform: `translateY(${pageBarThumbY}px)` }"
-        @mousedown.stop.prevent="handleThumbDown"
+        @pointerdown.stop.prevent="handleThumbDown"
       ></div>
     </div>
 
@@ -704,15 +704,16 @@ function schedulePageBar() {
   })
 }
 
-function handleThumbDown(event: MouseEvent) {
+function handleThumbDown(event: PointerEvent) {
   pageBarDragging.value = true
   pageBarDragStartY = event.clientY
   pageBarDragStartScroll = window.scrollY || document.documentElement.scrollTop
-  window.addEventListener('mousemove', handleThumbMove)
-  window.addEventListener('mouseup', handleThumbUp)
+  window.addEventListener('pointermove', handleThumbMove)
+  window.addEventListener('pointerup', handleThumbUp)
+  window.addEventListener('pointercancel', handleThumbUp)
 }
 
-function handleThumbMove(event: MouseEvent) {
+function handleThumbMove(event: PointerEvent) {
   const maxScroll = document.documentElement.scrollHeight - window.innerHeight
   const trackRange = pageBarTrackH - pageBarThumbH.value
   if (trackRange <= 0 || maxScroll <= 0) return
@@ -722,11 +723,12 @@ function handleThumbMove(event: MouseEvent) {
 
 function handleThumbUp() {
   pageBarDragging.value = false
-  window.removeEventListener('mousemove', handleThumbMove)
-  window.removeEventListener('mouseup', handleThumbUp)
+  window.removeEventListener('pointermove', handleThumbMove)
+  window.removeEventListener('pointerup', handleThumbUp)
+  window.removeEventListener('pointercancel', handleThumbUp)
 }
 
-function handleTrackDown(event: MouseEvent) {
+function handleTrackDown(event: PointerEvent) {
   const maxScroll = document.documentElement.scrollHeight - window.innerHeight
   const trackRange = pageBarTrackH - pageBarThumbH.value
   if (trackRange <= 0 || maxScroll <= 0) return
@@ -881,24 +883,19 @@ onBeforeUnmount(() => {
   border-radius: 999px;
   background: rgba(37, 42, 50, 0.1);
   transform: translateY(-50%);
-  cursor: pointer;
+  touch-action: none;
 }
 
 .photoScrollbarThumb {
   width: 100%;
   border-radius: 999px;
   background: rgba(37, 42, 50, 0.38);
-  cursor: grab;
   transition: background-color 0.2s ease;
 }
 
 .photoScrollbarThumb:hover,
 .photoScrollbarThumb.is-dragging {
   background: rgba(37, 42, 50, 0.56);
-}
-
-.photoScrollbarThumb.is-dragging {
-  cursor: grabbing;
 }
 
 [data-theme='Dark'] .photoScrollbar {
@@ -914,11 +911,6 @@ onBeforeUnmount(() => {
   background: rgba(255, 255, 255, 0.46);
 }
 
-@media (max-width: 800px) {
-  .photoScrollbar {
-    display: none;
-  }
-}
 
 .photoSkeletonGrid {
   padding-top: 14px;
