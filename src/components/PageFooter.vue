@@ -1,5 +1,5 @@
 <template>
-  <footer :class="{ visible: isVisible }">
+  <footer class="pageFooter" :class="{ visible: isVisible }">
     Copyright &copy; {{ currentYear }} aneko. All rights reserved.
   </footer>
 </template>
