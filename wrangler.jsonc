@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "aneko-homepage",
+  "name": "aneko-homepage-blog-disk-photos",
   "compatibility_date": "2026-07-17",
   "compatibility_flags": ["nodejs_compat"],
   "assets": {
