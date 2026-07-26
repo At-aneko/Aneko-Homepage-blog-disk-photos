@@ -115,7 +115,13 @@
       <span>{{ isAuthenticated ? '释放以上传照片' : '请先登录管理员' }}</span>
     </div>
 
-    <div v-if="pageBarVisible" class="photoScrollbar" :style="{ left: `${pageBarLeft}px` }" @pointerdown="handleTrackDown">
+    <div
+      v-if="pageBarVisible"
+      class="photoScrollbar"
+      :class="{ 'is-visible': pageBarShown }"
+      :style="{ left: `${pageBarLeft}px` }"
+      @pointerdown="handleTrackDown"
+    >
       <div
         class="photoScrollbarThumb"
         :class="{ 'is-dragging': pageBarDragging }"
@@ -666,6 +672,7 @@ function handleKeydown(event: KeyboardEvent) {
 }
 
 const pageBarVisible = ref(false)
+const pageBarShown = ref(false)
 const pageBarLeft = ref(0)
 const pageBarThumbH = ref(0)
 const pageBarThumbY = ref(0)
@@ -685,9 +692,12 @@ function updatePageBar() {
     pageBarVisible.value = false
     return
   }
-  pageBarLeft.value = Math.round(Math.min(masonry.getBoundingClientRect().right + 6, window.innerWidth - 16))
+  const masonryRect = masonry.getBoundingClientRect()
+  pageBarLeft.value = Math.round(Math.min(masonryRect.right + 6, window.innerWidth - 16))
   // 与样式里 height: min(420px, 60vh) 保持一致
   pageBarTrackH = Math.min(420, viewportH * 0.6)
+  // 第一行照片滚过轨道顶端后才慢慢显现
+  pageBarShown.value = masonryRect.top < (viewportH - pageBarTrackH) / 2
   const thumbH = Math.max(36, pageBarTrackH * (viewportH / scrollH))
   const maxScroll = scrollH - viewportH
   const progress = maxScroll > 0 ? Math.min(1, Math.max(0, (window.scrollY || doc.scrollTop) / maxScroll)) : 0
@@ -884,6 +894,14 @@ onBeforeUnmount(() => {
   background: rgba(37, 42, 50, 0.1);
   transform: translateY(-50%);
   touch-action: none;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.35s ease;
+}
+
+.photoScrollbar.is-visible {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .photoScrollbarThumb {
