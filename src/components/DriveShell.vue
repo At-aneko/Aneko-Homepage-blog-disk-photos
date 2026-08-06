@@ -23,6 +23,10 @@
           <FolderPlus :size="15" :stroke-width="1.8" aria-hidden="true" />
           <span>新建文件夹</span>
         </button>
+        <button type="button" title="下载测速" @click="openSpeedDialog">
+          <Gauge :size="15" :stroke-width="1.8" aria-hidden="true" />
+          <span>测速</span>
+        </button>
         <button type="button" :disabled="status === 'loading'" title="刷新" @click="loadFiles">
           <RefreshCw :size="15" :stroke-width="1.8" aria-hidden="true" />
           <span>刷新</span>
@@ -151,6 +155,78 @@
       </Transition>
 
       <Transition name="drive-modal">
+        <div v-if="showSpeedDialog" class="driveModalBackdrop" role="dialog" aria-modal="true" aria-labelledby="drive-speed-title" @mousedown.self="closeSpeedDialog">
+          <section class="driveModal driveSpeedModal">
+            <header>
+              <div>
+                <p>DOWNLOAD TEST</p>
+                <h3 id="drive-speed-title">下载测速</h3>
+              </div>
+              <button type="button" title="关闭" aria-label="关闭" @click="closeSpeedDialog">
+                <X :size="18" :stroke-width="1.8" aria-hidden="true" />
+              </button>
+            </header>
+
+            <div class="driveSpeedBody">
+              <div class="driveSpeedMeter" aria-live="polite">
+                <span>{{ speedStateLabel }}</span>
+                <strong>{{ formatSpeed(speedMbps) }}<small>Mbps</small></strong>
+                <p>{{ formatSpeed(speedMegabytesPerSecond) }} MB/s</p>
+              </div>
+
+              <div
+                class="driveSpeedProgress"
+                role="progressbar"
+                aria-label="测速进度"
+                aria-valuemin="0"
+                aria-valuemax="100"
+                :aria-valuenow="Math.round(speedProgress)"
+              >
+                <span :style="{ width: `${speedProgress}%` }"></span>
+              </div>
+
+              <div class="driveSpeedStats">
+                <div>
+                  <span>已接收</span>
+                  <strong>{{ formatFileSize(speedReceivedBytes) }} / {{ speedSizeMiB }} MB</strong>
+                </div>
+                <div>
+                  <span>耗时</span>
+                  <strong>{{ formatDuration(speedElapsedMs) }}</strong>
+                </div>
+              </div>
+
+              <div class="driveSpeedSizes" role="group" aria-label="测试数据大小">
+                <button
+                  v-for="size in SPEED_TEST_SIZES"
+                  :key="size"
+                  type="button"
+                  :class="{ 'is-active': speedSizeMiB === size }"
+                  :disabled="speedState === 'running'"
+                  @click="selectSpeedSize(size)"
+                >
+                  {{ size }} MB
+                </button>
+              </div>
+
+              <p v-if="speedError" class="driveFormError">{{ speedError }}</p>
+            </div>
+
+            <footer class="driveSpeedActions">
+              <button v-if="speedState === 'running'" type="button" @click="stopSpeedTest">
+                <Square :size="14" :stroke-width="1.8" aria-hidden="true" />
+                <span>停止</span>
+              </button>
+              <button v-else class="is-primary" type="button" @click="startSpeedTest">
+                <Gauge :size="15" :stroke-width="1.8" aria-hidden="true" />
+                <span>{{ speedState === 'complete' ? '重新测试' : '开始测试' }}</span>
+              </button>
+            </footer>
+          </section>
+        </div>
+      </Transition>
+
+      <Transition name="drive-modal">
         <div v-if="showFolderDialog" class="driveModalBackdrop" role="dialog" aria-modal="true" aria-labelledby="drive-folder-title" @mousedown.self="closeFolderDialog">
           <form class="driveModal driveFolderModal" @submit.prevent="createFolder">
             <header>
@@ -224,6 +300,7 @@ import {
   Film,
   Folder,
   FolderPlus,
+  Gauge,
   HardDrive,
   House,
   Image as ImageIcon,
@@ -232,6 +309,7 @@ import {
   LogOut,
   Music,
   RefreshCw,
+  Square,
   Trash2,
   Upload,
   X,
@@ -254,6 +332,10 @@ interface DriveFile {
 
 type DriveStatus = 'loading' | 'ready' | 'error'
 type PreviewKind = 'image' | 'video' | 'audio' | 'pdf' | 'text' | 'unknown'
+type SpeedState = 'idle' | 'running' | 'complete' | 'stopped' | 'error'
+
+const SPEED_TEST_SIZES = [100, 250, 500] as const
+const MEBIBYTE = 1024 * 1024
 
 const files = ref<DriveFile[]>([])
 const isMounted = ref(false)
@@ -282,15 +364,38 @@ const previewUrl = ref('')
 const previewText = ref('')
 const previewLoading = ref(false)
 const previewError = ref('')
+const showSpeedDialog = ref(false)
+const speedSizeMiB = ref<(typeof SPEED_TEST_SIZES)[number]>(250)
+const speedState = ref<SpeedState>('idle')
+const speedReceivedBytes = ref(0)
+const speedElapsedMs = ref(0)
+const speedError = ref('')
 let listController: AbortController | null = null
 let previewController: AbortController | null = null
+let speedController: AbortController | null = null
 let noticeTimer: number | null = null
+let lastSpeedMetricAt = 0
 
 const pathParts = computed(() => prefix.value.split('/').filter(Boolean))
 const sortedFiles = computed(() => [...files.value].sort((a, b) => {
   if (a.isFolder !== b.isFolder) return a.isFolder ? -1 : 1
   return displayName(a).localeCompare(displayName(b), 'zh-CN')
 }))
+const speedTargetBytes = computed(() => speedSizeMiB.value * MEBIBYTE)
+const speedProgress = computed(() => Math.min(100, (speedReceivedBytes.value / speedTargetBytes.value) * 100))
+const speedBytesPerSecond = computed(() => {
+  const seconds = speedElapsedMs.value / 1000
+  return seconds > 0 ? speedReceivedBytes.value / seconds : 0
+})
+const speedMbps = computed(() => speedBytesPerSecond.value * 8 / 1_000_000)
+const speedMegabytesPerSecond = computed(() => speedBytesPerSecond.value / MEBIBYTE)
+const speedStateLabel = computed(() => ({
+  idle: '准备就绪',
+  running: '正在测速',
+  complete: '测试完成',
+  stopped: '测试已停止',
+  error: '测试失败',
+})[speedState.value])
 
 async function loadFiles() {
   listController?.abort()
@@ -383,6 +488,15 @@ function formatDate(value: string) {
   return Number.isNaN(date.valueOf()) ? '—' : new Intl.DateTimeFormat('zh-CN', {
     year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
   }).format(date)
+}
+
+function formatSpeed(value: number) {
+  if (!Number.isFinite(value) || value <= 0) return '0.0'
+  return value >= 100 ? value.toFixed(0) : value.toFixed(1)
+}
+
+function formatDuration(milliseconds: number) {
+  return `${(Math.max(0, milliseconds) / 1000).toFixed(1)} s`
 }
 
 function showNotice(message: string, kind: 'success' | 'error' = 'success') {
@@ -498,6 +612,91 @@ function closeFolderDialog() {
   if (!folderSubmitting.value) showFolderDialog.value = false
 }
 
+function resetSpeedTest() {
+  speedState.value = 'idle'
+  speedReceivedBytes.value = 0
+  speedElapsedMs.value = 0
+  speedError.value = ''
+  lastSpeedMetricAt = 0
+}
+
+function openSpeedDialog() {
+  resetSpeedTest()
+  showSpeedDialog.value = true
+}
+
+function closeSpeedDialog() {
+  speedController?.abort()
+  showSpeedDialog.value = false
+}
+
+function selectSpeedSize(size: (typeof SPEED_TEST_SIZES)[number]) {
+  speedSizeMiB.value = size
+  resetSpeedTest()
+}
+
+function updateSpeedMetrics(startedAt: number, force = false) {
+  const now = performance.now()
+  if (!force && now - lastSpeedMetricAt < 100) return
+  speedElapsedMs.value = now - startedAt
+  lastSpeedMetricAt = now
+}
+
+function stopSpeedTest() {
+  if (speedState.value !== 'running') return
+  speedState.value = 'stopped'
+  speedController?.abort()
+}
+
+async function startSpeedTest() {
+  speedController?.abort()
+  const controller = new AbortController()
+  speedController = controller
+  speedState.value = 'running'
+  speedReceivedBytes.value = 0
+  speedElapsedMs.value = 0
+  speedError.value = ''
+  lastSpeedMetricAt = 0
+
+  try {
+    const query = new URLSearchParams({
+      size: String(speedSizeMiB.value),
+      nonce: crypto.randomUUID(),
+    })
+    const response = await fetch(`/api/drive/speed-test?${query}`, {
+      cache: 'no-store',
+      signal: controller.signal,
+    })
+    if (!response.ok) throw new Error(`HTTP ${response.status}`)
+
+    const reader = response.body?.getReader()
+    if (!reader) throw new Error('当前浏览器不支持流式测速')
+
+    const expectedBytes = Number(response.headers.get('X-Speed-Test-Bytes')) || speedTargetBytes.value
+    const startedAt = performance.now()
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      speedReceivedBytes.value += value.byteLength
+      updateSpeedMetrics(startedAt)
+    }
+
+    updateSpeedMetrics(startedAt, true)
+    if (speedReceivedBytes.value < expectedBytes) throw new Error('测速数据未完整接收')
+    speedState.value = 'complete'
+  } catch (error) {
+    if ((error as Error).name === 'AbortError') {
+      if (speedState.value === 'running') speedState.value = 'stopped'
+      return
+    }
+    speedState.value = 'error'
+    speedError.value = error instanceof Error ? error.message : '测速失败'
+  } finally {
+    if (speedController === controller) speedController = null
+  }
+}
+
 async function createFolder() {
   folderSubmitting.value = true
   folderError.value = ''
@@ -593,6 +792,7 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   listController?.abort()
   previewController?.abort()
+  speedController?.abort()
   if (noticeTimer !== null) window.clearTimeout(noticeTimer)
 })
 </script>
@@ -640,7 +840,8 @@ onBeforeUnmount(() => {
 
 .driveCommands button,
 .drivePrimaryButton,
-.drivePreviewModal footer button {
+.drivePreviewModal footer button,
+.driveSpeedActions button {
   min-height: 36px;
   padding: 0 11px;
   border: 1px solid var(--module_dock_border);
@@ -657,14 +858,16 @@ onBeforeUnmount(() => {
 }
 
 .driveCommands button:hover,
-.drivePreviewModal footer button:hover {
+.drivePreviewModal footer button:hover,
+.driveSpeedActions button:hover {
   border-color: var(--module_dock_active_border);
   background: var(--item_hover_color);
   transform: translateY(-1px);
 }
 
 .driveCommands button:active,
-.drivePreviewModal footer button:active {
+.drivePreviewModal footer button:active,
+.driveSpeedActions button:active {
   transform: scale(0.97);
 }
 
@@ -970,6 +1173,160 @@ onBeforeUnmount(() => {
 
 .drivePrimaryButton:disabled { opacity: 0.5; }
 
+.driveSpeedModal {
+  width: min(480px, 100%);
+}
+
+.driveSpeedBody {
+  display: grid;
+  gap: 16px;
+}
+
+.driveSpeedMeter {
+  min-height: 150px;
+  padding: 22px;
+  border: 1px solid var(--weather_dialog_line);
+  border-radius: 7px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: var(--weather_dialog_control_bg);
+  text-align: center;
+}
+
+.driveSpeedMeter > span {
+  color: var(--weather_dialog_muted);
+  font-size: 9px;
+  line-height: 13px;
+}
+
+.driveSpeedMeter strong {
+  margin-top: 4px;
+  font-size: 38px;
+  font-weight: 600;
+  line-height: 46px;
+}
+
+.driveSpeedMeter strong small {
+  margin-left: 7px;
+  font-size: 11px;
+  font-weight: 500;
+  opacity: 0.54;
+}
+
+.driveSpeedMeter p {
+  margin: 1px 0 0;
+  color: var(--weather_dialog_muted);
+  font-size: 10px;
+}
+
+.driveSpeedProgress {
+  height: 7px;
+  border-radius: 3px;
+  overflow: hidden;
+  background: var(--weather_dialog_control_bg);
+}
+
+.driveSpeedProgress span {
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  display: block;
+  background: var(--weather_dialog_active_bg);
+  transition: width 0.12s linear;
+}
+
+.driveSpeedStats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.driveSpeedStats div {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--weather_dialog_line);
+  border-radius: 6px;
+  background: var(--weather_dialog_surface);
+}
+
+.driveSpeedStats span,
+.driveSpeedStats strong {
+  display: block;
+}
+
+.driveSpeedStats span {
+  color: var(--weather_dialog_muted);
+  font-size: 8px;
+  line-height: 12px;
+}
+
+.driveSpeedStats strong {
+  margin-top: 3px;
+  overflow: hidden;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.driveSpeedSizes {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.driveSpeedSizes button {
+  min-width: 0;
+  min-height: 36px;
+  padding: 0 8px;
+  border: 1px solid var(--weather_dialog_line_strong);
+  border-radius: 6px;
+  color: inherit;
+  background: var(--weather_dialog_control_bg);
+  font-size: 10px;
+  cursor: pointer;
+  transition: background-color 0.2s ease, border-color 0.2s ease, opacity 0.2s ease;
+}
+
+.driveSpeedSizes button:hover {
+  border-color: var(--weather_dialog_active_bg);
+}
+
+.driveSpeedSizes button.is-active {
+  border-color: var(--weather_dialog_active_bg);
+  color: var(--weather_dialog_active_text);
+  background: var(--weather_dialog_active_bg);
+}
+
+.driveSpeedSizes button:disabled {
+  opacity: 0.48;
+  cursor: default;
+}
+
+.driveSpeedActions {
+  min-height: 53px;
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--weather_dialog_line);
+  display: flex;
+  justify-content: flex-end;
+}
+
+.driveSpeedActions button {
+  min-width: 112px;
+  color: var(--weather_dialog_text);
+  background: var(--weather_dialog_control_bg);
+}
+
+.driveSpeedActions button.is-primary {
+  border-color: var(--weather_dialog_active_bg);
+  color: var(--weather_dialog_active_text);
+  background: var(--weather_dialog_active_bg);
+}
+
 .drivePreviewModal {
   width: min(920px, 100%);
   max-height: calc(100dvh - 36px);
@@ -1090,6 +1447,11 @@ onBeforeUnmount(() => {
   .driveTable th,
   .driveTable td { padding-right: 7px; padding-left: 7px; }
   .driveModalBackdrop { padding: 10px; }
+  .driveSpeedModal { padding: 16px; }
+  .driveSpeedMeter { min-height: 132px; padding: 18px 12px; }
+  .driveSpeedMeter strong { font-size: 32px; line-height: 40px; }
+  .driveSpeedStats { grid-template-columns: 1fr; }
+  .driveSpeedActions button { width: 100%; }
   .drivePreviewModal { max-height: calc(100dvh - 20px); }
   .drivePreviewBody { max-height: 72dvh; }
 }
