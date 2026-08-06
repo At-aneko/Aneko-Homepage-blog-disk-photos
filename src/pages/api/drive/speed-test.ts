@@ -5,14 +5,17 @@ export const prerender = false
 
 const MEBIBYTE = 1024 * 1024
 const CHUNK_SIZE = 4 * MEBIBYTE
-const RANDOM_BLOCK_SIZE = 64 * 1024
 const ALLOWED_SIZES = new Set([100, 250, 500])
 
 function createPayloadChunk() {
   const chunk = new Uint8Array(CHUNK_SIZE)
+  let state = 0x6d2b79f5
 
-  for (let offset = 0; offset < chunk.length; offset += RANDOM_BLOCK_SIZE) {
-    crypto.getRandomValues(chunk.subarray(offset, Math.min(offset + RANDOM_BLOCK_SIZE, chunk.length)))
+  for (let index = 0; index < chunk.length; index += 1) {
+    state ^= state << 13
+    state ^= state >>> 17
+    state ^= state << 5
+    chunk[index] = state & 0xff
   }
 
   return chunk
