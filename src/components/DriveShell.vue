@@ -188,7 +188,7 @@
               <div class="driveSpeedStats">
                 <div>
                   <span>已接收</span>
-                  <strong>{{ formatFileSize(speedReceivedBytes) }} / {{ speedSizeMiB }} MB</strong>
+                  <strong>{{ formatFileSize(speedReceivedBytes) }} / {{ speedSizeLabel }}</strong>
                 </div>
                 <div>
                   <span>耗时</span>
@@ -199,13 +199,13 @@
               <div class="driveSpeedSizes" role="group" aria-label="测试数据大小">
                 <button
                   v-for="size in SPEED_TEST_SIZES"
-                  :key="size"
+                  :key="size.id"
                   type="button"
-                  :class="{ 'is-active': speedSizeMiB === size }"
+                  :class="{ 'is-active': speedSizeKey === size.id }"
                   :disabled="speedState === 'running'"
-                  @click="selectSpeedSize(size)"
+                  @click="selectSpeedSize(size.id)"
                 >
-                  {{ size }} MB
+                  {{ size.label }}
                 </button>
               </div>
 
@@ -333,9 +333,17 @@ interface DriveFile {
 type DriveStatus = 'loading' | 'ready' | 'error'
 type PreviewKind = 'image' | 'video' | 'audio' | 'pdf' | 'text' | 'unknown'
 type SpeedState = 'idle' | 'running' | 'complete' | 'stopped' | 'error'
+type SpeedSizeKey = '100m' | '500m' | '1g' | '5g' | '10g'
 
-const SPEED_TEST_SIZES = [100, 250, 500] as const
 const MEBIBYTE = 1024 * 1024
+const SPEED_TEST_SEGMENT_BYTES = 64 * MEBIBYTE
+const SPEED_TEST_SIZES = [
+  { id: '100m', label: '100 MB', bytes: 100 * MEBIBYTE },
+  { id: '500m', label: '500 MB', bytes: 500 * MEBIBYTE },
+  { id: '1g', label: '1 GB', bytes: 1024 * MEBIBYTE },
+  { id: '5g', label: '5 GB', bytes: 5 * 1024 * MEBIBYTE },
+  { id: '10g', label: '10 GB', bytes: 10 * 1024 * MEBIBYTE },
+] as const
 
 const files = ref<DriveFile[]>([])
 const isMounted = ref(false)
@@ -365,7 +373,7 @@ const previewText = ref('')
 const previewLoading = ref(false)
 const previewError = ref('')
 const showSpeedDialog = ref(false)
-const speedSizeMiB = ref<(typeof SPEED_TEST_SIZES)[number]>(250)
+const speedSizeKey = ref<SpeedSizeKey>('500m')
 const speedState = ref<SpeedState>('idle')
 const speedReceivedBytes = ref(0)
 const speedElapsedMs = ref(0)
@@ -381,7 +389,9 @@ const sortedFiles = computed(() => [...files.value].sort((a, b) => {
   if (a.isFolder !== b.isFolder) return a.isFolder ? -1 : 1
   return displayName(a).localeCompare(displayName(b), 'zh-CN')
 }))
-const speedTargetBytes = computed(() => speedSizeMiB.value * MEBIBYTE)
+const speedSizeOption = computed(() => SPEED_TEST_SIZES.find((size) => size.id === speedSizeKey.value) || SPEED_TEST_SIZES[0])
+const speedSizeLabel = computed(() => speedSizeOption.value.label)
+const speedTargetBytes = computed(() => speedSizeOption.value.bytes)
 const speedProgress = computed(() => Math.min(100, (speedReceivedBytes.value / speedTargetBytes.value) * 100))
 const speedBytesPerSecond = computed(() => {
   const seconds = speedElapsedMs.value / 1000
@@ -626,12 +636,14 @@ function openSpeedDialog() {
 }
 
 function closeSpeedDialog() {
-  speedController?.abort()
+  const controller = speedController
+  speedController = null
+  controller?.abort()
   showSpeedDialog.value = false
 }
 
-function selectSpeedSize(size: (typeof SPEED_TEST_SIZES)[number]) {
-  speedSizeMiB.value = size
+function selectSpeedSize(size: SpeedSizeKey) {
+  speedSizeKey.value = size
   resetSpeedTest()
 }
 
@@ -659,33 +671,61 @@ async function startSpeedTest() {
   lastSpeedMetricAt = 0
 
   try {
-    const query = new URLSearchParams({
-      size: String(speedSizeMiB.value),
-      nonce: crypto.randomUUID(),
-    })
-    const response = await fetch(`/api/drive/speed-test?${query}`, {
-      cache: 'no-store',
-      signal: controller.signal,
-    })
-    if (!response.ok) throw new Error(`HTTP ${response.status}`)
-
-    const reader = response.body?.getReader()
-    if (!reader) throw new Error('当前浏览器不支持流式测速')
-
-    const expectedBytes = Number(response.headers.get('X-Speed-Test-Bytes')) || speedTargetBytes.value
+    const targetBytes = speedTargetBytes.value
+    const sizeKey = speedSizeKey.value
+    const nonce = crypto.randomUUID()
     const startedAt = performance.now()
+    let offset = 0
 
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-      speedReceivedBytes.value += value.byteLength
-      updateSpeedMetrics(startedAt)
+    while (offset < targetBytes) {
+      const requestBytes = Math.min(SPEED_TEST_SEGMENT_BYTES, targetBytes - offset)
+      const query = new URLSearchParams({
+        size: sizeKey,
+        offset: String(offset),
+        length: String(requestBytes),
+        nonce,
+      })
+      const response = await fetch(`/api/drive/speed-test?${query}`, {
+        cache: 'no-store',
+        signal: controller.signal,
+      })
+      if (!response.ok) throw new Error(`HTTP ${response.status}`)
+
+      const reader = response.body?.getReader()
+      if (!reader) throw new Error('当前浏览器不支持流式测速')
+
+      const expectedBytes = Number(response.headers.get('X-Speed-Test-Bytes')) || requestBytes
+      const advertisedTotal = Number(response.headers.get('X-Speed-Test-Total-Bytes')) || targetBytes
+      if (advertisedTotal !== targetBytes || expectedBytes <= 0 || expectedBytes > requestBytes) {
+        throw new Error('测速数据范围无效')
+      }
+
+      let segmentBytes = 0
+      try {
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          segmentBytes += value.byteLength
+          speedReceivedBytes.value += value.byteLength
+          if (segmentBytes > expectedBytes || speedReceivedBytes.value > targetBytes) {
+            throw new Error('测速数据超出预期')
+          }
+          updateSpeedMetrics(startedAt)
+        }
+      } finally {
+        reader.releaseLock()
+      }
+
+      if (segmentBytes !== expectedBytes) throw new Error('测速数据未完整接收')
+      offset += segmentBytes
     }
 
     updateSpeedMetrics(startedAt, true)
-    if (speedReceivedBytes.value < expectedBytes) throw new Error('测速数据未完整接收')
+    if (speedReceivedBytes.value !== targetBytes) throw new Error('测速数据未完整接收')
+    if (speedController !== controller) return
     speedState.value = 'complete'
   } catch (error) {
+    if (speedController !== controller) return
     if ((error as Error).name === 'AbortError') {
       if (speedState.value === 'running') speedState.value = 'stopped'
       return
@@ -1274,7 +1314,7 @@ onBeforeUnmount(() => {
 
 .driveSpeedSizes {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 7px;
 }
 
@@ -1451,6 +1491,7 @@ onBeforeUnmount(() => {
   .driveSpeedMeter { min-height: 132px; padding: 18px 12px; }
   .driveSpeedMeter strong { font-size: 32px; line-height: 40px; }
   .driveSpeedStats { grid-template-columns: 1fr; }
+  .driveSpeedSizes { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .driveSpeedActions button { width: 100%; }
   .drivePreviewModal { max-height: calc(100dvh - 20px); }
   .drivePreviewBody { max-height: 72dvh; }
