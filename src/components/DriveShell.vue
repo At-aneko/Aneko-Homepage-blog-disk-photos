@@ -171,7 +171,7 @@
               <div class="driveSpeedMeter" aria-live="polite">
                 <span>{{ speedStateLabel }}</span>
                 <strong>{{ formatSpeed(speedMbps) }}<small>Mbps</small></strong>
-                <p>{{ formatSpeed(speedMegabytesPerSecond) }} MB/s · 固定 60 秒</p>
+                <p>{{ formatSpeed(speedMegabytesPerSecond) }} MB/s</p>
               </div>
 
               <div
@@ -360,6 +360,7 @@ const speedError = ref('')
 let listController: AbortController | null = null
 let previewController: AbortController | null = null
 let speedController: AbortController | null = null
+let speedReader: ReadableStreamDefaultReader<Uint8Array> | null = null
 let noticeTimer: number | null = null
 let speedStopTimer: number | null = null
 let speedTickTimer: number | null = null
@@ -618,6 +619,7 @@ function openSpeedDialog() {
 function closeSpeedDialog() {
   const controller = speedController
   speedController = null
+  cancelSpeedReader()
   clearSpeedTimers()
   controller?.abort()
   showSpeedDialog.value = false
@@ -641,6 +643,12 @@ function clearSpeedTimers() {
   }
 }
 
+function cancelSpeedReader() {
+  const reader = speedReader
+  speedReader = null
+  if (reader) reader.cancel().catch(() => undefined)
+}
+
 function formatCountdown(milliseconds: number) {
   return `${Math.ceil(Math.max(0, milliseconds) / 1000)} s`
 }
@@ -648,6 +656,7 @@ function formatCountdown(milliseconds: number) {
 function stopSpeedTest() {
   if (speedState.value !== 'running') return
   speedState.value = 'stopped'
+  cancelSpeedReader()
   speedController?.abort()
 }
 
@@ -667,6 +676,7 @@ async function startSpeedTest() {
     if (speedController !== controller) return
     timedOut = true
     updateSpeedMetrics(startedAt, true)
+    cancelSpeedReader()
     controller.abort()
   }, SPEED_TEST_DURATION_MS)
   speedTickTimer = window.setInterval(() => updateSpeedMetrics(startedAt, true), 100)
@@ -678,6 +688,7 @@ async function startSpeedTest() {
 
     const reader = response.body?.getReader()
     if (!reader) throw new Error('当前浏览器不支持流式测速')
+    speedReader = reader
     try {
       while (true) {
         const { done, value } = await reader.read()
@@ -686,8 +697,10 @@ async function startSpeedTest() {
         updateSpeedMetrics(startedAt)
       }
     } finally {
+      if (speedReader === reader) speedReader = null
       reader.releaseLock()
     }
+    if (speedState.value === 'stopped') return
     if (timedOut) speedState.value = 'complete'
     else if (speedController === controller) throw new Error('测速流提前结束')
   } catch (error) {
@@ -800,6 +813,7 @@ onBeforeUnmount(() => {
   listController?.abort()
   previewController?.abort()
   clearSpeedTimers()
+  cancelSpeedReader()
   speedController?.abort()
   if (noticeTimer !== null) window.clearTimeout(noticeTimer)
 })
