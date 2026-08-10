@@ -200,6 +200,10 @@
             </div>
 
             <footer class="driveSpeedActions">
+              <a v-if="speedState !== 'running'" :href="SPEED_TEST_DOWNLOAD_URL" download title="直接下载测速">
+                <Download :size="15" :stroke-width="1.8" aria-hidden="true" />
+                <span>直接下载测速</span>
+              </a>
               <button v-if="speedState === 'running'" type="button" @click="stopSpeedTest">
                 <Square :size="14" :stroke-width="1.8" aria-hidden="true" />
                 <span>停止</span>
@@ -324,6 +328,7 @@ type SpeedState = 'idle' | 'running' | 'complete' | 'stopped' | 'error'
 const MEBIBYTE = 1024 * 1024
 const SPEED_TEST_DURATION_SECONDS = 60
 const SPEED_TEST_DURATION_MS = SPEED_TEST_DURATION_SECONDS * 1000
+const SPEED_TEST_DOWNLOAD_URL = `/api/drive/speed-test?duration=${SPEED_TEST_DURATION_SECONDS}`
 
 const files = ref<DriveFile[]>([])
 const isMounted = ref(false)
@@ -865,7 +870,8 @@ onBeforeUnmount(() => {
 .driveCommands button,
 .drivePrimaryButton,
 .drivePreviewModal footer button,
-.driveSpeedActions button {
+.driveSpeedActions button,
+.driveSpeedActions a {
   min-height: 36px;
   padding: 0 11px;
   border: 1px solid var(--module_dock_border);
@@ -883,7 +889,8 @@ onBeforeUnmount(() => {
 
 .driveCommands button:hover,
 .drivePreviewModal footer button:hover,
-.driveSpeedActions button:hover {
+.driveSpeedActions button:hover,
+.driveSpeedActions a:hover {
   border-color: var(--module_dock_active_border);
   background: var(--item_hover_color);
   transform: translateY(-1px);
@@ -891,7 +898,8 @@ onBeforeUnmount(() => {
 
 .driveCommands button:active,
 .drivePreviewModal footer button:active,
-.driveSpeedActions button:active {
+.driveSpeedActions button:active,
+.driveSpeedActions a:active {
   transform: scale(0.97);
 }
 
@@ -1303,12 +1311,15 @@ onBeforeUnmount(() => {
   border-top: 1px solid var(--weather_dialog_line);
   display: flex;
   justify-content: flex-end;
+  gap: 7px;
 }
 
-.driveSpeedActions button {
+.driveSpeedActions button,
+.driveSpeedActions a {
   min-width: 112px;
   color: var(--weather_dialog_text);
   background: var(--weather_dialog_control_bg);
+  text-decoration: none;
 }
 
 .driveSpeedActions button.is-primary {
@@ -1441,7 +1452,8 @@ onBeforeUnmount(() => {
   .driveSpeedMeter { min-height: 132px; padding: 18px 12px; }
   .driveSpeedMeter strong { font-size: 32px; line-height: 40px; }
   .driveSpeedStats { grid-template-columns: 1fr; }
-  .driveSpeedActions button { width: 100%; }
+  .driveSpeedActions button,
+  .driveSpeedActions a { width: 100%; }
   .drivePreviewModal { max-height: calc(100dvh - 20px); }
   .drivePreviewBody { max-height: 72dvh; }
 }

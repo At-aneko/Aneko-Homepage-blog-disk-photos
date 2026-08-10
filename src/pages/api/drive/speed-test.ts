@@ -6,7 +6,6 @@ export const prerender = false
 const MEBIBYTE = 1024 * 1024
 const CHUNK_SIZE = 4 * MEBIBYTE
 const TEST_DURATION_SECONDS = 60
-const WORKER_MAX_DURATION_SECONDS = TEST_DURATION_SECONDS + 5
 
 function createPayloadChunk() {
   const chunk = new Uint8Array(CHUNK_SIZE)
@@ -57,7 +56,7 @@ export const GET: APIRoute = async ({ request }) => {
     } catch {
       // The client normally closes the stream first.
     }
-  }, WORKER_MAX_DURATION_SECONDS * 1000)
+  }, TEST_DURATION_SECONDS * 1000)
 
   return new Response(stream, {
     headers: {
