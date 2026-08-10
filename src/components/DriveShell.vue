@@ -656,6 +656,7 @@ function formatCountdown(milliseconds: number) {
 function stopSpeedTest() {
   if (speedState.value !== 'running') return
   speedState.value = 'stopped'
+  clearSpeedTimers()
   cancelSpeedReader()
   speedController?.abort()
 }
@@ -713,6 +714,7 @@ async function startSpeedTest() {
     speedState.value = 'error'
     speedError.value = error instanceof Error ? error.message : '测速失败'
   } finally {
+    clearSpeedTimers()
     if (speedController === controller) speedController = null
   }
 }
