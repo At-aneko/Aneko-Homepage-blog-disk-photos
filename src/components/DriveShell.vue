@@ -200,9 +200,9 @@
             </div>
 
             <footer class="driveSpeedActions">
-              <a v-if="speedState !== 'running'" :href="SPEED_TEST_DOWNLOAD_URL" download title="直接下载测速">
+              <a v-if="speedState !== 'running'" :href="SPEED_TEST_DOWNLOAD_URL" download title="下载测速">
                 <Download :size="15" :stroke-width="1.8" aria-hidden="true" />
-                <span>直接下载测速</span>
+                <span>下载测速</span>
               </a>
               <button v-if="speedState === 'running'" type="button" @click="stopSpeedTest">
                 <Square :size="14" :stroke-width="1.8" aria-hidden="true" />
