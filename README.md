@@ -78,7 +78,7 @@ Aneko Homepage 是参考zyyo主页风格，基于 Astro 7、Vue 3 和 Cloudflare
 
 - 上传一个或多个文件，也可以拖放上传。
 - 创建文件夹、进入或返回目录。
-- 使用 Worker 动态生成的数据流固定测试 60 秒并显示下载速率，也可通过 `/api/drive/speed-test?mode=download` 下载测速链接持续测试，最长 30 分钟后自动停止；不占用 R2 存储。
+- 使用 Worker 动态生成的数据流固定测试 60 秒并显示下载速率，也可通过 `/api/drive/speed-test?duration=1800` 下载测速链接测试 1800 秒；修改 `duration` 参数即可设置测试秒数，不支持的值会回退为 60 秒（不占用 R2 存储）。
 - 预览常见图片、视频、音频、PDF 和文本文件。
 - 下载文件、删除文件或递归删除目录。
 

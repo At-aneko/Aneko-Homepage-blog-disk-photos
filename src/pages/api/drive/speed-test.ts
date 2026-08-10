@@ -5,8 +5,8 @@ export const prerender = false
 
 const MEBIBYTE = 1024 * 1024
 const CHUNK_SIZE = 4 * MEBIBYTE
-const TEST_DURATION_SECONDS = 60
-const DOWNLOAD_DURATION_SECONDS = 30 * 60
+const DEFAULT_DURATION_SECONDS = 60
+const MAX_DURATION_SECONDS = Math.floor(2_147_483_647 / 1000)
 
 function createPayloadChunk() {
   const chunk = new Uint8Array(CHUNK_SIZE)
@@ -31,17 +31,13 @@ export const GET: APIRoute = async ({ request }) => {
   }
 
   const url = new URL(request.url)
-  const mode = url.searchParams.get('mode')
-  const isDownloadTest = mode === 'download'
-  if (mode && !isDownloadTest) return errorResponse('Invalid speed test mode')
   const durationParam = url.searchParams.get('duration')
-  if (isDownloadTest) {
-    if (durationParam !== null) return errorResponse('Invalid speed test duration')
-  } else {
-    const requestedDuration = Number(durationParam || TEST_DURATION_SECONDS)
-    if (requestedDuration !== TEST_DURATION_SECONDS) return errorResponse('Invalid speed test duration')
-  }
-  const durationSeconds = isDownloadTest ? DOWNLOAD_DURATION_SECONDS : TEST_DURATION_SECONDS
+  const requestedDuration = Number(durationParam)
+  const durationSeconds = Number.isInteger(requestedDuration)
+    && requestedDuration >= 1
+    && requestedDuration <= MAX_DURATION_SECONDS
+    ? requestedDuration
+    : DEFAULT_DURATION_SECONDS
 
   let closed = false
   let timer: ReturnType<typeof setTimeout> | undefined
@@ -71,7 +67,7 @@ export const GET: APIRoute = async ({ request }) => {
   return new Response(stream, {
     headers: {
       'Cache-Control': 'no-store, no-transform',
-      'Content-Disposition': `attachment; filename="aneko-speed-test-${isDownloadTest ? '30m' : '60s'}.bin"`,
+      'Content-Disposition': `attachment; filename="aneko-speed-test-${durationSeconds}s.bin"`,
       'Content-Encoding': 'identity',
       'Content-Type': 'application/octet-stream',
       'Cross-Origin-Resource-Policy': 'same-origin',
