@@ -328,7 +328,7 @@ type SpeedState = 'idle' | 'running' | 'complete' | 'stopped' | 'error'
 const MEBIBYTE = 1024 * 1024
 const SPEED_TEST_DURATION_SECONDS = 60
 const SPEED_TEST_DURATION_MS = SPEED_TEST_DURATION_SECONDS * 1000
-const SPEED_TEST_DOWNLOAD_URL = `/api/drive/speed-test?duration=${SPEED_TEST_DURATION_SECONDS}`
+const SPEED_TEST_DOWNLOAD_URL = '/api/drive/speed-test?mode=download'
 
 const files = ref<DriveFile[]>([])
 const isMounted = ref(false)
