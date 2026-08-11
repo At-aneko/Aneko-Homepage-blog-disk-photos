@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro'
-import { verifyAccessCode } from '../../../../utils/auth'
+import { verifyAdminRequest } from '../../../../utils/auth'
 import { getBindings, PHOTO_OBJECT_PREFIX } from '../../../../utils/cloudflare'
 import { errorResponse, r2ObjectResponse, successResponse } from '../../../../utils/http'
 import { normalizeObjectPath } from '../../../../utils/r2'
@@ -26,7 +26,7 @@ export const GET: APIRoute = async ({ params, request }) => {
 
 export const PUT: APIRoute = async ({ params, request }) => {
   const bindings = getBindings()
-  if (!await verifyAccessCode(request.headers.get('X-Access-Code'), bindings.ACCESS_CODE)) {
+  if (!await verifyAdminRequest(request, bindings)) {
     return errorResponse('Unauthorized', 401)
   }
 
@@ -46,7 +46,7 @@ export const PUT: APIRoute = async ({ params, request }) => {
 
 export const DELETE: APIRoute = async ({ params, request }) => {
   const bindings = getBindings()
-  if (!await verifyAccessCode(request.headers.get('X-Access-Code'), bindings.ACCESS_CODE)) {
+  if (!await verifyAdminRequest(request, bindings)) {
     return errorResponse('Unauthorized', 401)
   }
 

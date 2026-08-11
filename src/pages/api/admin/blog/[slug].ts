@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro'
-import { verifyAccessCode } from '../../../../utils/auth'
+import { verifyAdminRequest } from '../../../../utils/auth'
 import { BLOG_BODY_PREFIX, BLOG_META_PREFIX, getBindings } from '../../../../utils/cloudflare'
 import { errorResponse, successResponse } from '../../../../utils/http'
 import {
@@ -48,7 +48,7 @@ function isoDate(value: unknown, field: string) {
 
 async function isAuthorized(request: Request) {
   const bindings = getBindings()
-  return verifyAccessCode(request.headers.get('X-Access-Code'), bindings.ACCESS_CODE)
+  return verifyAdminRequest(request, bindings)
 }
 
 function isValidSlug(slug: string) {

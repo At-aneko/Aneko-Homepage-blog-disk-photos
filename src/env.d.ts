@@ -7,6 +7,8 @@ interface Env {
   ANEKO_R2: R2Bucket
   ASSETS: Fetcher
   ACCESS_CODE?: string
+  TURNSTILE_SECRET?: string
+  TURNSTILE_HOSTNAMES?: string
   BLOG_INDEX_KEY?: string
   PHOTO_MANIFEST_KEY?: string
   DRIVE_PREFIX?: string

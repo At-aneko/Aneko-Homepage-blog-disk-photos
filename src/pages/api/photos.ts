@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro'
-import { verifyAccessCode } from '../../utils/auth'
+import { verifyAdminRequest } from '../../utils/auth'
 import { getBindings, getPhotoManifestKey } from '../../utils/cloudflare'
 import { errorResponse, jsonResponse, successResponse } from '../../utils/http'
 import { normalizeObjectPath } from '../../utils/r2'
@@ -51,7 +51,7 @@ export const GET: APIRoute = async () => {
 
 export const PUT: APIRoute = async ({ request }) => {
   const bindings = getBindings()
-  if (!await verifyAccessCode(request.headers.get('X-Access-Code'), bindings.ACCESS_CODE)) {
+  if (!await verifyAdminRequest(request, bindings)) {
     return errorResponse('Unauthorized', 401)
   }
 

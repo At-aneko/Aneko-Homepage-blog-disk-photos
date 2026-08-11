@@ -32,6 +32,14 @@
               required
             />
           </div>
+          <TurnstileWidget
+            :key="turnstileKey"
+            :site-key="TURNSTILE_SITE_KEY"
+            action="admin_login"
+            @token="handleTurnstileToken"
+            @expired="handleTurnstileExpired"
+            @error="handleTurnstileError"
+          />
           <p v-if="error" class="adminFormError">{{ error }}</p>
           <button class="adminPrimaryButton" type="submit" :disabled="submitting">
             {{ submitting ? '验证中' : '登录' }}
@@ -45,7 +53,9 @@
 <script setup lang="ts">
 import { nextTick, onMounted, ref, watch } from 'vue'
 import { LockKeyhole, X } from '@lucide/vue'
-import { storeAdminAccess, verifyAdminAccess } from '../utils/admin-client'
+import { storeAdminAccess, verifyAdminAccess as verifyAdminAccessRequest } from '../utils/admin-client'
+import TurnstileWidget from './TurnstileWidget.vue'
+import { TURNSTILE_SITE_KEY } from '../utils/turnstile-client'
 
 const props = defineProps<{ open: boolean }>()
 const emit = defineEmits<{
@@ -58,6 +68,8 @@ const error = ref('')
 const submitting = ref(false)
 const input = ref<HTMLInputElement | null>(null)
 const isMounted = ref(false)
+const turnstileToken = ref('')
+const turnstileKey = ref(0)
 
 onMounted(() => {
   isMounted.value = true
@@ -67,12 +79,37 @@ watch(() => props.open, async (open) => {
   if (!open) return
   code.value = ''
   error.value = ''
+  turnstileToken.value = ''
+  turnstileKey.value += 1
   await nextTick()
   input.value?.focus()
 })
 
 function close() {
   if (!submitting.value) emit('close')
+}
+
+function handleTurnstileToken(token: string) {
+  turnstileToken.value = token
+  error.value = ''
+}
+
+function handleTurnstileExpired() {
+  turnstileToken.value = ''
+  error.value = '安全验证已过期，请重新验证'
+}
+
+function handleTurnstileError() {
+  turnstileToken.value = ''
+  error.value = '安全验证加载失败，请刷新后重试'
+}
+
+async function verifyAdminAccess(codeValue: string) {
+  const token = turnstileToken.value
+  if (!token) throw new Error('请完成安全验证')
+  turnstileToken.value = ''
+  turnstileKey.value += 1
+  return verifyAdminAccessRequest(codeValue, token)
 }
 
 async function submit() {

@@ -24,11 +24,11 @@ export async function apiRequest<T>(path: string, options?: RequestInit): Promis
   return payload.data
 }
 
-export async function verifyAdminAccess(code: string) {
+export async function verifyAdminAccess(code: string, turnstileToken: string) {
   const result = await apiRequest<{ valid: boolean }>('/api/admin/auth', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ code }),
+    body: JSON.stringify({ code, 'cf-turnstile-response': turnstileToken }),
   })
   return result.valid
 }
@@ -41,6 +41,10 @@ export function storeAdminAccess(code: string) {
 export function clearAdminAccess() {
   sessionStorage.removeItem(ADMIN_SESSION_KEY)
   sessionStorage.removeItem(LEGACY_SESSION_KEY)
+  void fetch('/api/admin/session', {
+    method: 'DELETE',
+    keepalive: true,
+  }).catch(() => undefined)
 }
 
 export async function restoreAdminAccess() {
@@ -51,7 +55,12 @@ export async function restoreAdminAccess() {
   if (!code) return ''
 
   try {
-    if (!await verifyAdminAccess(code)) {
+    const result = await apiRequest<{ valid: boolean }>('/api/admin/session', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code }),
+    })
+    if (!result.valid) {
       clearAdminAccess()
       return ''
     }

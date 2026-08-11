@@ -1,1 +1,5 @@
+# Local development placeholders only. Never put production secrets in this file.
 ACCESS_CODE=replace-with-a-local-admin-code
+TURNSTILE_SECRET=replace-with-turnstile-secret
+# Local Turnstile hostname allowlist; production uses www.aneko.ink.
+TURNSTILE_HOSTNAMES=localhost,127.0.0.1

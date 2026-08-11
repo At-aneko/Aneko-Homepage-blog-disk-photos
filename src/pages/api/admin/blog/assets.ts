@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro'
-import { verifyAccessCode } from '../../../../utils/auth'
+import { verifyAdminRequest } from '../../../../utils/auth'
 import { BLOG_ASSET_PREFIX, getBindings } from '../../../../utils/cloudflare'
 import { errorResponse, successResponse } from '../../../../utils/http'
 
@@ -9,7 +9,7 @@ const SLUG_PATTERN = /^[\p{L}\p{N}]+(?:-[\p{L}\p{N}]+)*$/u
 
 export const GET: APIRoute = async ({ request }) => {
   const bindings = getBindings()
-  if (!await verifyAccessCode(request.headers.get('X-Access-Code'), bindings.ACCESS_CODE)) {
+  if (!await verifyAdminRequest(request, bindings)) {
     return errorResponse('Unauthorized', 401)
   }
 

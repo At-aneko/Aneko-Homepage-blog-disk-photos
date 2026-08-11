@@ -146,6 +146,14 @@
               <LockKeyhole :size="17" :stroke-width="1.7" aria-hidden="true" />
               <input id="drive-access-code" v-model="authCodeInput" type="password" autocomplete="current-password" required />
             </div>
+            <TurnstileWidget
+              :key="turnstileKey"
+              :site-key="TURNSTILE_SITE_KEY"
+              action="admin_login"
+              @token="handleTurnstileToken"
+              @expired="handleTurnstileExpired"
+              @error="handleTurnstileError"
+            />
             <p v-if="authError" class="driveFormError">{{ authError }}</p>
             <button class="drivePrimaryButton" type="submit" :disabled="authSubmitting">
               {{ authSubmitting ? '验证中' : '登录' }}
@@ -310,8 +318,10 @@ import {
   clearAdminAccess,
   restoreAdminAccess,
   storeAdminAccess,
-  verifyAdminAccess,
+  verifyAdminAccess as verifyAdminAccessRequest,
 } from '../utils/admin-client'
+import TurnstileWidget from './TurnstileWidget.vue'
+import { TURNSTILE_SITE_KEY } from '../utils/turnstile-client'
 
 interface DriveFile {
   key: string
@@ -343,6 +353,8 @@ const showAuthDialog = ref(false)
 const authCodeInput = ref('')
 const authError = ref('')
 const authSubmitting = ref(false)
+const turnstileToken = ref('')
+const turnstileKey = ref(0)
 const showFolderDialog = ref(false)
 const folderName = ref('')
 const folderError = ref('')
@@ -507,11 +519,36 @@ function showNotice(message: string, kind: 'success' | 'error' = 'success') {
 function openAuthDialog() {
   authCodeInput.value = ''
   authError.value = ''
+  turnstileToken.value = ''
+  turnstileKey.value += 1
   showAuthDialog.value = true
 }
 
 function closeAuthDialog() {
   if (!authSubmitting.value) showAuthDialog.value = false
+}
+
+function handleTurnstileToken(token: string) {
+  turnstileToken.value = token
+  authError.value = ''
+}
+
+function handleTurnstileExpired() {
+  turnstileToken.value = ''
+  authError.value = '安全验证已过期，请重新验证'
+}
+
+function handleTurnstileError() {
+  turnstileToken.value = ''
+  authError.value = '安全验证加载失败，请刷新后重试'
+}
+
+async function verifyAdminAccess(codeValue: string) {
+  const token = turnstileToken.value
+  if (!token) throw new Error('请完成安全验证')
+  turnstileToken.value = ''
+  turnstileKey.value += 1
+  return verifyAdminAccessRequest(codeValue, token)
 }
 
 async function submitAuth() {

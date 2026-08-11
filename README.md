@@ -37,7 +37,9 @@ Aneko Homepage 是参考zyyo主页风格，基于 Astro 7、Vue 3 和 Cloudflare
 
 博客、相册和网盘共用 Worker secret `ACCESS_CODE`。它是网站管理员访问码，不是 Cloudflare API Token。
 
-登录成功后，访问码只保存在当前标签页的 `sessionStorage` 中。同一标签页切换到其他管理页面时通常不需要再次登录；关闭标签页或点击退出后需要重新输入。服务端仍会校验每一次写操作。
+所有管理员登录在校验访问码前都会先通过 Cloudflare Turnstile。前端使用的 site key `0x4AAAAAAEMYXVJdgh9PVSLN` 是公开标识，可以出现在浏览器代码和仓库中；对应的 `TURNSTILE_SECRET` 只允许保存在 Cloudflare Worker 的加密 Secret 中，不能写入前端、配置文件或提交到仓库。
+
+登录成功后，访问码只保存在当前标签页的 `sessionStorage` 中，服务端同时签发一个 12 小时有效的 `HttpOnly` 管理会话 Cookie。所有管理读取和写入都必须同时通过访问码与会话校验；退出时会清除两者。同一标签页切换到其他管理页面时通常不需要再次登录，关闭标签页后则需要重新输入访问码。
 
 ### 博客管理
 
@@ -94,6 +96,8 @@ Aneko Homepage 是参考zyyo主页风格，基于 Astro 7、Vue 3 和 Cloudflare
 | `ANEKO_R2` | R2 binding | 博客正文/附件、相册原图和网盘文件 |
 | `ANEKO_KV` | KV binding | 博客元数据/索引和相册清单 |
 | `ACCESS_CODE` | Worker secret | 网站管理员访问码 |
+| `TURNSTILE_SECRET` | Worker secret | Turnstile 服务端验证密钥，只能配置为加密 Secret |
+| `TURNSTILE_HOSTNAMES` | Worker variable | Turnstile 允许的站点主机名，生产环境为 `www.aneko.ink` |
 | `BLOG_INDEX_KEY` | Worker variable | 博客索引键，默认 `blog:index` |
 | `PHOTO_MANIFEST_KEY` | Worker variable | 相册清单键，默认 `photos` |
 | `DRIVE_PREFIX` | Worker variable | 网盘对象前缀，默认 `drive/` |
@@ -105,7 +109,7 @@ Aneko Homepage 是参考zyyo主页风格，基于 Astro 7、Vue 3 和 Cloudflare
 | `ANEKO_R2` | `aneko-homepage-blog-disk-photos-aneko-r2` |
 | `ANEKO_KV` | `aneko-homepage-blog-disk-photos-aneko-kv` |
 
-绑定名称和默认键定义在 `wrangler.jsonc` 与 `src/utils/cloudflare.ts`。不要把 Cloudflare API Token、真实 `ACCESS_CODE`、R2 凭据或 KV 凭据提交到仓库。
+绑定名称和默认键定义在 `wrangler.jsonc` 与 `src/utils/cloudflare.ts`。`wrangler.jsonc` 只保存非敏感变量，不包含 `TURNSTILE_SECRET`。不要把 Cloudflare API Token、真实 `ACCESS_CODE`、真实 `TURNSTILE_SECRET`、R2 凭据或 KV 凭据提交到仓库。
 
 ### 数据位置
 
@@ -180,13 +184,16 @@ R2 本身没有空目录，因此创建文件夹时会写入 `drive/<folder>/.ke
 
 ## 部署
 
-部署前需要在 Cloudflare Worker 中完成以下配置：
+部署前需要在 Cloudflare Dashboard 中完成以下配置，不需要使用 Wrangler：
 
-1. 将 R2 bucket 绑定为 `ANEKO_R2`。
-2. 将 KV namespace 绑定为 `ANEKO_KV`。
-3. 将管理员访问码配置为 secret `ACCESS_CODE`。
-4. 保留或按需修改 `BLOG_INDEX_KEY`、`PHOTO_MANIFEST_KEY` 和 `DRIVE_PREFIX`。
-5. 将自定义域名绑定到 Worker。
+1. 打开 **Workers & Pages**，选择当前 Worker，然后进入 **Settings > Bindings**，将 R2 bucket 绑定为 `ANEKO_R2`，将 KV namespace 绑定为 `ANEKO_KV`。
+2. 进入 **Settings > Variables and Secrets**，将管理员访问码添加为加密 Secret `ACCESS_CODE`。
+3. 在同一页面将 Turnstile widget 的 secret key 添加为加密 Secret `TURNSTILE_SECRET`。不要使用公开 site key 代替，也不要把值写入仓库。
+4. 添加普通文本变量 `TURNSTILE_HOSTNAMES`，生产环境填写 `www.aneko.ink`。多个允许主机名使用英文逗号分隔。
+5. 保留或按需修改 `BLOG_INDEX_KEY`、`PHOTO_MANIFEST_KEY` 和 `DRIVE_PREFIX`，然后部署 Worker 使变量生效。
+6. 在 **Settings > Domains & Routes** 中确认自定义域名 `www.aneko.ink` 已绑定到该 Worker。
+
+Turnstile 的公开 site key 已直接集成在前端代码中，无需在 Worker 变量中重复配置。仓库中的 `.dev.vars.example` 仅提供本地开发占位符；不要把生产 `TURNSTILE_SECRET` 写入该示例文件。
 
 
 ## 项目结构
