@@ -1010,21 +1010,21 @@ body {
 }
 
 .projectItemRight img {
-  height: 45px;
-  width: 45px;
+  height: 67.5px;
+  width: 67.5px;
   transition: transform 0.4s ease;
 }
 
 /* Match each asset's visible artwork to the cloud icon's main cloud body. */
 .projectItemRight img.projectIcon--blog,
 .projectItemRight img.projectIcon--mail {
-  height: 24px;
-  width: 24px;
+  height: 36px;
+  width: 36px;
 }
 
 .projectItemRight img.projectIcon--photo {
-  height: 35px;
-  width: 35px;
+  height: 52.5px;
+  width: 52.5px;
 }
 
 .externalLinksSection {
