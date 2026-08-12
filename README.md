@@ -1,6 +1,6 @@
 # Aneko Homepage
 
-Aneko Homepage 是参考zyyo主页风格，基于 Astro 7、Vue 3 和 Cloudflare Workers 构建的个人站点，包含主页、博客、相册、公开网盘和邮箱服务配置。博客、相册、网盘和邮箱连接均可直接在网站中管理，日常使用不需要手工调用接口或进入 Cloudflare 后台修改数据。
+Aneko Homepage 是参考zyyo主页风格，基于 Astro 7、Vue 3 和 Cloudflare Workers 构建的个人站点，包含主页、博客、相册和公开网盘。博客、相册和网盘均可直接在网站中管理，日常使用不需要手工调用接口或进入 Cloudflare 后台修改数据。
 
 - 演示站点：[www.aneko.ink](https://www.aneko.ink)
 - 源码仓库：[At-aneko/Aneko-Homepage-blog-disk-photos](https://github.com/At-aneko/Aneko-Homepage-blog-disk-photos)
@@ -14,7 +14,6 @@ Aneko Homepage 是参考zyyo主页风格，基于 Astro 7、Vue 3 和 Cloudflare
 | 博客管理 | `/admin/blog/` | 登录后可写入 |
 | 相册 | `/photos/` | 公开浏览，登录后可管理 |
 | 网盘 | `/drive/` | 公开浏览和下载，登录后可管理 |
-| 邮箱 | `/mail/` | 公开查看服务状态，登录后可配置 |
 
 ## 主要功能
 
@@ -22,22 +21,21 @@ Aneko Homepage 是参考zyyo主页风格，基于 Astro 7、Vue 3 和 Cloudflare
 - 博客管理：新建、编辑、发布、删除、导入 Markdown、上传头图和附件。
 - 相册：瀑布流、灯箱、原图查看与下载，以及照片上传、编辑、排序和删除。
 - 网盘：目录浏览、文件预览与下载，以及文件上传、文件夹创建和递归删除。
-- 邮箱：公开邮箱入口，以及 IMAP、POP3、SMTP 和 Webhook 管理配置。
-- 统一登录：博客、相册、网盘和邮箱共用一个管理员访问码。
-- Cloudflare 存储：R2 保存文件，KV 保存博客元数据、相册清单和加密邮箱配置。
+- 统一登录：博客、相册和网盘共用一个管理员访问码。
+- Cloudflare 存储：R2 保存文件，KV 保存博客元数据和相册清单。
 
 ## 技术栈
 
 - [Astro 7](https://astro.build/)：服务端路由、页面布局、Markdown 渲染和 Worker 输出。
-- [Vue 3](https://vuejs.org/)：管理界面、主题、搜索、相册、网盘和邮箱配置交互。
+- [Vue 3](https://vuejs.org/)：管理界面、主题、搜索、相册和网盘交互。
 - [Cloudflare Workers](https://workers.cloudflare.com/)：站点运行环境。
 - [Cloudflare R2](https://developers.cloudflare.com/r2/)：博客正文与附件、相册原图和网盘文件。
-- [Cloudflare KV](https://developers.cloudflare.com/kv/)：博客索引、文章元数据、相册清单和加密邮箱配置。
+- [Cloudflare KV](https://developers.cloudflare.com/kv/)：博客索引、文章元数据和相册清单。
 - [pnpm](https://pnpm.io/)：依赖和脚本管理。
 
 ## 网站内管理
 
-博客、相册、网盘和邮箱共用 Worker secret `ACCESS_CODE`。它是网站管理员访问码，不是 Cloudflare API Token。
+博客、相册和网盘共用 Worker secret `ACCESS_CODE`。它是网站管理员访问码，不是 Cloudflare API Token。
 
 所有管理员登录在校验访问码前都会先通过 Cloudflare Turnstile。前端使用的 site key `0x4AAAAAAEMYXVJdgh9PVSLN` 是公开标识，可以出现在浏览器代码和仓库中；对应的 `TURNSTILE_SECRET` 只允许保存在 Cloudflare Worker 的加密 Secret 中，不能写入前端、配置文件或提交到仓库。
 
@@ -88,18 +86,6 @@ Aneko Homepage 是参考zyyo主页风格，基于 Astro 7、Vue 3 和 Cloudflare
 
 网盘目录直接来自 R2 的 `drive/` 前缀，不使用 KV。访客可以浏览和下载，只有管理员可以写入。同一路径上传同名文件会直接覆盖旧对象；删除文件和目录没有回收站，操作不可恢复。
 
-### 邮箱配置
-
-进入 [`/mail/`](https://www.aneko.ink/mail/)。访客只能看到管理员主动公开的邮箱地址、Webmail 入口和各项服务的启用状态；登录后可以编辑：
-
-- 公开状态、展示名、邮箱地址、说明和 HTTPS Webmail 地址。
-- IMAP、POP3、SMTP 的主机、端口、TLS/STARTTLS、用户名和密码。
-- Webhook 的 HTTPS 地址、事件类型、认证方式和签名密钥。
-
-已保存的协议密码和 Webhook 密钥不会返回浏览器，管理页只显示“已配置”。密码输入留空表示保留，只有显式选择清除才会删除。私有配置使用 `MAIL_CONFIG_ENCRYPTION_KEY` 进行 AES-256-GCM 加密后写入 `MAIL_CONFIG_KV_KEY` 指向的 KV 键（默认 `mail:config:v1`）；真实密码、Webhook 地址和密钥不会明文写入 KV、R2 或仓库。
-
-当前邮箱页是连接与通知配置中心，不是完整 Webmail，也不会在保存时主动连接邮件服务器或发送测试 Webhook。Cloudflare Worker 不能接收入站 TCP，也不适合在普通页面请求中持续轮询 IMAP/POP3；后续如需收件箱、发信和事件投递，应使用独立的 Email Routing/定时 Worker、D1、R2 与 Queue。
-
 ## Cloudflare 存储
 
 ### 绑定与变量
@@ -108,15 +94,13 @@ Aneko Homepage 是参考zyyo主页风格，基于 Astro 7、Vue 3 和 Cloudflare
 | --- | --- | --- |
 | `ASSETS` | Workers Assets binding | Astro 构建后的静态资源 |
 | `ANEKO_R2` | R2 binding | 博客正文/附件、相册原图和网盘文件 |
-| `ANEKO_KV` | KV binding | 博客元数据/索引、相册清单和加密邮箱配置 |
+| `ANEKO_KV` | KV binding | 博客元数据/索引和相册清单 |
 | `ACCESS_CODE` | Worker secret | 网站管理员访问码 |
 | `TURNSTILE_SECRET` | Worker secret | Turnstile 服务端验证密钥，只能配置为加密 Secret |
-| `MAIL_CONFIG_ENCRYPTION_KEY` | Worker secret | 32 字节邮箱配置加密密钥，只能配置为加密 Secret |
 | `TURNSTILE_HOSTNAMES` | Worker variable | Turnstile 允许的站点主机名，生产环境为 `www.aneko.ink` |
 | `BLOG_INDEX_KEY` | Worker variable | 博客索引键，默认 `blog:index` |
 | `PHOTO_MANIFEST_KEY` | Worker variable | 相册清单键，默认 `photos` |
 | `DRIVE_PREFIX` | Worker variable | 网盘对象前缀，默认 `drive/` |
-| `MAIL_CONFIG_KV_KEY` | Worker variable | 邮箱配置键，默认 `mail:config:v1` |
 
 当前生产环境的绑定目标如下；资源名称变更时，以 Cloudflare Worker 中的实际绑定为准。
 
@@ -125,7 +109,7 @@ Aneko Homepage 是参考zyyo主页风格，基于 Astro 7、Vue 3 和 Cloudflare
 | `ANEKO_R2` | `aneko-homepage-blog-disk-photos-aneko-r2` |
 | `ANEKO_KV` | `aneko-homepage-blog-disk-photos-aneko-kv` |
 
-绑定名称和默认键定义在 `wrangler.jsonc`、`src/utils/cloudflare.ts` 与对应存储工具中。`wrangler.jsonc` 只保存非敏感变量，不包含任何真实 Secret。不要把 Cloudflare API Token、真实 `ACCESS_CODE`、真实 `TURNSTILE_SECRET`、真实 `MAIL_CONFIG_ENCRYPTION_KEY`、R2 凭据或 KV 凭据提交到仓库。
+绑定名称和默认键定义在 `wrangler.jsonc` 与 `src/utils/cloudflare.ts`。`wrangler.jsonc` 只保存非敏感变量，不包含 `TURNSTILE_SECRET`。不要把 Cloudflare API Token、真实 `ACCESS_CODE`、真实 `TURNSTILE_SECRET`、R2 凭据或 KV 凭据提交到仓库。
 
 ### 数据位置
 
@@ -136,7 +120,6 @@ Aneko Homepage 是参考zyyo主页风格，基于 Astro 7、Vue 3 和 Cloudflare
 | 相册原图 | `photos/<relative-path>` | `photos` |
 | 网盘文件 | `drive/<relative-path>` | 无 |
 | 网盘空目录标记 | `drive/<folder>/.keep` | 无 |
-| 邮箱公开信息和加密私有配置 | 无 | `MAIL_CONFIG_KV_KEY` 指向的键，默认 `mail:config:v1` |
 
 对象路径统一使用 `/`，不能包含空路径段、`.`、`..` 或 NUL。网页界面会自动生成符合要求的路径。
 
@@ -206,12 +189,11 @@ R2 本身没有空目录，因此创建文件夹时会写入 `drive/<folder>/.ke
 1. 打开 **Workers & Pages**，选择当前 Worker，然后进入 **Settings > Bindings**，将 R2 bucket 绑定为 `ANEKO_R2`，将 KV namespace 绑定为 `ANEKO_KV`。
 2. 进入 **Settings > Variables and Secrets**，将管理员访问码添加为加密 Secret `ACCESS_CODE`。
 3. 在同一页面将 Turnstile widget 的 secret key 添加为加密 Secret `TURNSTILE_SECRET`。不要使用公开 site key 代替，也不要把值写入仓库。
-4. 生成随机 32 字节密钥，以 Base64URL、64 位十六进制或 32 字节原文形式添加为加密 Secret `MAIL_CONFIG_ENCRYPTION_KEY`。已有邮箱配置时不要直接轮换该密钥，否则现有密文将无法读取；如确需轮换，应先在 Cloudflare 中备份或清除 `MAIL_CONFIG_KV_KEY` 指向的键，再重新配置。
-5. 添加普通文本变量 `TURNSTILE_HOSTNAMES`，生产环境填写 `www.aneko.ink`。多个允许主机名使用英文逗号分隔。
-6. 保留或按需修改 `BLOG_INDEX_KEY`、`PHOTO_MANIFEST_KEY`、`DRIVE_PREFIX` 和 `MAIL_CONFIG_KV_KEY`，然后部署 Worker 使变量生效。
-7. 在 **Settings > Domains & Routes** 中确认自定义域名 `www.aneko.ink` 已绑定到该 Worker。
+4. 添加普通文本变量 `TURNSTILE_HOSTNAMES`，生产环境填写 `www.aneko.ink`。多个允许主机名使用英文逗号分隔。
+5. 保留或按需修改 `BLOG_INDEX_KEY`、`PHOTO_MANIFEST_KEY` 和 `DRIVE_PREFIX`，然后部署 Worker 使变量生效。
+6. 在 **Settings > Domains & Routes** 中确认自定义域名 `www.aneko.ink` 已绑定到该 Worker。
 
-Turnstile 的公开 site key 已直接集成在前端代码中，无需在 Worker 变量中重复配置。仓库中的 `.dev.vars.example` 仅提供本地开发占位符；不要把生产 `TURNSTILE_SECRET` 或 `MAIL_CONFIG_ENCRYPTION_KEY` 写入该示例文件。
+Turnstile 的公开 site key 已直接集成在前端代码中，无需在 Worker 变量中重复配置。仓库中的 `.dev.vars.example` 仅提供本地开发占位符；不要把生产 `TURNSTILE_SECRET` 写入该示例文件。
 
 
 ## 项目结构

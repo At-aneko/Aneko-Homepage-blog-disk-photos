@@ -3,5 +3,3 @@ ACCESS_CODE=replace-with-a-local-admin-code
 TURNSTILE_SECRET=replace-with-turnstile-secret
 # Local Turnstile hostname allowlist; production uses www.aneko.ink.
 TURNSTILE_HOSTNAMES=localhost,127.0.0.1
-# Base64url-encoded 32-byte key used only to encrypt local mail settings.
-MAIL_CONFIG_ENCRYPTION_KEY=replace-with-random-32-byte-base64url-key

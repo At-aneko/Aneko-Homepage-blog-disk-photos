@@ -21,7 +21,3 @@ export function getDrivePrefix(bindings: Env) {
   const prefix = bindings.DRIVE_PREFIX || 'drive/'
   return prefix.endsWith('/') ? prefix : `${prefix}/`
 }
-
-export function getMailConfigKey(bindings: Pick<Env, 'MAIL_CONFIG_KV_KEY'>) {
-  return bindings.MAIL_CONFIG_KV_KEY?.trim() || 'mail:config:v1'
-}
