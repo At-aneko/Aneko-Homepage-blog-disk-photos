@@ -5,6 +5,6 @@ TURNSTILE_SECRET=replace-with-turnstile-secret
 TURNSTILE_HOSTNAMES=localhost,127.0.0.1
 # Encrypts the saved IMAP/SMTP credentials. Use a separate random value locally.
 MAIL_CONFIG_ENCRYPTION_KEY=replace-with-a-local-mail-config-encryption-key
-# Optional local overrides. Add exact IMAP/SMTP hosts for development; empty blocks all connections.
+# Optional local overrides. Add exact IMAP/SMTP hosts to restrict connections; empty uses platform limits only.
 MAIL_CONFIG_KV_KEY=mail:config:v2
 MAIL_ALLOWED_HOSTS=

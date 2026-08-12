@@ -143,8 +143,13 @@ function normalizeHostname(value: string, field: string) {
   return hostname
 }
 
-function passwordField(input: JsonRecord, existing: string, field: string) {
-  if (!Object.prototype.hasOwnProperty.call(input, 'password')) return existing
+function passwordField(input: JsonRecord, existing: string, field: string, endpointChanged: boolean) {
+  if (!Object.prototype.hasOwnProperty.call(input, 'password')) {
+    if (existing && endpointChanged) {
+      validationError(`${field}.password is required when host or username changes`)
+    }
+    return existing
+  }
   const value = input.password
   if (value === null) return ''
   if (typeof value !== 'string' || !value || value.length > MAX_PASSWORD_LENGTH) {
@@ -163,11 +168,15 @@ function normalizeConnection(
   const expectedPort = field === 'imap' ? 993 : 465
   if (input.port !== expectedPort) validationError(`${field}.port must be ${expectedPort}`)
 
+  const host = normalizeHostname(textField(input, 'host', field, { maxLength: 253 }), `${field}.host`)
+  const username = textField(input, 'username', field, { maxLength: 320 })
+  const endpointChanged = host !== existing.host || username !== existing.username
+
   return {
-    host: normalizeHostname(textField(input, 'host', field, { maxLength: 253 }), `${field}.host`),
+    host,
     port: expectedPort,
-    username: textField(input, 'username', field, { maxLength: 320 }),
-    password: passwordField(input, existing.password, field),
+    username,
+    password: passwordField(input, existing.password, field, endpointChanged),
   }
 }
 
@@ -219,7 +228,7 @@ function parseAllowedHosts(value?: string) {
 
 function validateMailHostsAllowed(bindings: MailBindings, configuration: MailConfiguration) {
   const allowed = parseAllowedHosts(bindings.MAIL_ALLOWED_HOSTS)
-  if (!allowed.size) validationError('MAIL_ALLOWED_HOSTS is not configured')
+  if (!allowed.size) return
   for (const connection of [configuration.imap, configuration.smtp]) {
     if (!allowed.has(connection.host)) {
       validationError('A mail server is not in MAIL_ALLOWED_HOSTS')

@@ -99,10 +99,10 @@ Aneko Homepage 是参考zyyo主页风格，基于 Astro 7、Vue 3 和 Cloudflare
 - 邮件列表和正文从邮箱服务商按需读取，发送操作直接交给配置的 SMTP 服务。
 - 邮件正文不会保存到 KV、R2 或其他本站存储；KV 只保存经过 AES-256-GCM 加密的 IMAP/SMTP 连接凭据。
 - 不创建或分配邮箱账户，不提供 POP3，也不提供 Webhook 收信或通知功能。
-- 邮箱设置中的密码默认不回显；留空会保留原密码，同时清除 IMAP 与 SMTP 密码会停用已保存的邮箱连接。保存操作仍会校验主机白名单，因此部署环境必须正确设置 `MAIL_ALLOWED_HOSTS`。
+- 邮箱设置中的密码默认不回显；服务器和用户名不变时，留空会保留原密码；修改服务器或用户名时必须重新输入对应密码。同时清除 IMAP 与 SMTP 密码会停用已保存的邮箱连接。
 - 发信使用请求幂等键和简单限流来降低误重复；Cloudflare KV 是最终一致性存储，因此这不是跨边缘并发下的严格一次投递保证。发送结果不确定时，应先检查邮箱服务商的已发送文件夹再重试。
 
-邮箱页面是管理员专用 Webmail，不是临时邮箱服务。部署前必须确认邮箱服务商允许从 Cloudflare Workers 建立 IMAP/SMTP 连接，并将实际使用的 IMAP 与 SMTP 主机名加入 `MAIL_ALLOWED_HOSTS`。该白名单使用英文逗号分隔的准确主机名；默认空字符串会拒绝所有邮箱连接，不会自动放行任意主机。
+邮箱页面是管理员专用 Webmail，不是临时邮箱服务。部署前必须确认邮箱服务商允许从 Cloudflare Workers 建立 IMAP/SMTP 连接。`MAIL_ALLOWED_HOSTS` 是可选的额外限制：留空时，管理员可以在网页中填写任意通过主机名语法与 Cloudflare Socket 出站限制的服务器；填写后只允许连接英文逗号分隔的准确主机名，不支持通配符、协议或端口。
 
 邮箱实现使用 `cf-imap`、`worker-mailer` 和 `DOMPurify`。交互与 Worker 邮件能力受到 MIT 许可项目 [`dreamhunter2333/cloudflare_temp_email`](https://github.com/dreamhunter2333/cloudflare_temp_email) 的启发，但本项目只连接管理员已有邮箱，不包含临时邮箱地址创建或邮件托管能力。
 
@@ -120,7 +120,7 @@ Aneko Homepage 是参考zyyo主页风格，基于 Astro 7、Vue 3 和 Cloudflare
 | `TURNSTILE_HOSTNAMES` | Worker variable | Turnstile 允许的站点主机名，生产环境为 `www.aneko.ink` |
 | `MAIL_CONFIG_ENCRYPTION_KEY` | Worker secret | 邮箱连接凭据的 AES-256-GCM 加密密钥，只能配置为加密 Secret |
 | `MAIL_CONFIG_KV_KEY` | Worker variable | 加密邮箱配置的 KV 键，默认 `mail:config:v2` |
-| `MAIL_ALLOWED_HOSTS` | Worker variable | 允许连接的 IMAP/SMTP 主机名，生产环境必须准确配置 |
+| `MAIL_ALLOWED_HOSTS` | Worker variable | 可选的 IMAP/SMTP 主机名白名单；留空时只应用主机名校验和 Cloudflare 出站限制 |
 | `BLOG_INDEX_KEY` | Worker variable | 博客索引键，默认 `blog:index` |
 | `PHOTO_MANIFEST_KEY` | Worker variable | 相册清单键，默认 `photos` |
 | `DRIVE_PREFIX` | Worker variable | 网盘对象前缀，默认 `drive/` |
@@ -221,12 +221,12 @@ R2 本身没有空目录，因此创建文件夹时会写入 `drive/<folder>/.ke
 3. 在同一页面将 Turnstile widget 的 secret key 添加为加密 Secret `TURNSTILE_SECRET`。不要使用公开 site key 代替，也不要把值写入仓库。
 4. 在同一页面为邮箱凭据添加独立的加密 Secret `MAIL_CONFIG_ENCRYPTION_KEY`。优先使用随机 32 字节的 Base64URL 值，不要复用管理员访问码或提交到仓库。
 5. 添加普通文本变量 `TURNSTILE_HOSTNAMES`，生产环境填写 `www.aneko.ink`。多个允许主机名使用英文逗号分隔。
-6. 添加普通文本变量 `MAIL_ALLOWED_HOSTS`，填写实际邮箱服务商的 IMAP 与 SMTP 主机名，例如 `imap.example.com,smtp.example.com`。只填写准确主机名，不包含协议或端口；留空时邮箱功能会拒绝全部连接。
+6. 可选添加普通文本变量 `MAIL_ALLOWED_HOSTS`，将邮箱连接限制为指定的 IMAP 与 SMTP 主机名，例如 `imap.example.com,smtp.example.com`。只填写准确主机名，不包含协议或端口；留空时管理员可以直接在邮箱页面配置通过主机名校验和 Cloudflare Socket 出站限制的服务器。
 7. 保留 `MAIL_CONFIG_KV_KEY=mail:config:v2`，或在尚未保存邮箱配置前按需修改。修改后原键中的配置不会自动迁移。
 8. 保留或按需修改 `BLOG_INDEX_KEY`、`PHOTO_MANIFEST_KEY` 和 `DRIVE_PREFIX`，然后部署 Worker 使变量生效。
 9. 在 **Settings > Domains & Routes** 中确认自定义域名 `www.aneko.ink` 已绑定到该 Worker。
 
-Turnstile 的公开 site key 已直接集成在前端代码中，无需在 Worker 变量中重复配置。`wrangler.jsonc` 故意将 `MAIL_ALLOWED_HOSTS` 留空，使未完成生产白名单配置的部署保持拒绝连接。仓库中的 `.dev.vars.example` 仅提供本地开发占位符；不要把生产 `TURNSTILE_SECRET`、`MAIL_CONFIG_ENCRYPTION_KEY` 或邮箱密码写入该示例文件。
+Turnstile 的公开 site key 已直接集成在前端代码中，无需在 Worker 变量中重复配置。`wrangler.jsonc` 默认将 `MAIL_ALLOWED_HOSTS` 留空，便于管理员完全通过邮箱页面配置连接；需要固定邮箱服务商时，再在 Cloudflare 中填写精确白名单。仓库中的 `.dev.vars.example` 仅提供本地开发占位符；不要把生产 `TURNSTILE_SECRET`、`MAIL_CONFIG_ENCRYPTION_KEY` 或邮箱密码写入该示例文件。
 
 
 ## 项目结构
