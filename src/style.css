@@ -977,8 +977,7 @@ body {
   width: 0%;
 }
 
-.projectItem:hover .projectItemRight img,
-.projectItem:hover .projectItemRight .projectItemIcon {
+.projectItem:hover .projectItemRight img {
   transform: rotate(40deg);
 }
 
@@ -1010,15 +1009,9 @@ body {
   height: 100%;
 }
 
-.projectItemRight img,
-.projectItemRight .projectItemIcon {
+.projectItemRight img {
   height: 39px;
   width: 39px;
-}
-
-.projectItemRight .projectItemIcon {
-  fill: none;
-  stroke: currentColor;
   transition: transform 0.4s ease;
 }
 
