@@ -21,6 +21,8 @@
     "BLOG_INDEX_KEY": "blog:index",
     "PHOTO_MANIFEST_KEY": "photos",
     "DRIVE_PREFIX": "drive/",
-    "TURNSTILE_HOSTNAMES": "www.aneko.ink"
+    "TURNSTILE_HOSTNAMES": "www.aneko.ink",
+    "MAIL_CONFIG_KV_KEY": "mail:config:v2",
+    "MAIL_ALLOWED_HOSTS": ""
   }
 }

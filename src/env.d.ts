@@ -9,6 +9,9 @@ interface Env {
   ACCESS_CODE?: string
   TURNSTILE_SECRET?: string
   TURNSTILE_HOSTNAMES?: string
+  MAIL_CONFIG_ENCRYPTION_KEY?: string
+  MAIL_CONFIG_KV_KEY?: string
+  MAIL_ALLOWED_HOSTS?: string
   BLOG_INDEX_KEY?: string
   PHOTO_MANIFEST_KEY?: string
   DRIVE_PREFIX?: string

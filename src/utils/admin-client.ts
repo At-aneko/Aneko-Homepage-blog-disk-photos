@@ -7,6 +7,16 @@ export interface ApiEnvelope<T> {
 export const ADMIN_SESSION_KEY = 'aneko-admin-access'
 const LEGACY_SESSION_KEY = 'aneko-drive-access'
 
+export class ApiRequestError extends Error {
+  status: number
+
+  constructor(message: string, status: number) {
+    super(message)
+    this.name = 'ApiRequestError'
+    this.status = status
+  }
+}
+
 export async function apiRequest<T>(path: string, options?: RequestInit): Promise<T> {
   const response = await fetch(path, options)
   let payload: ApiEnvelope<T>
@@ -14,11 +24,11 @@ export async function apiRequest<T>(path: string, options?: RequestInit): Promis
   try {
     payload = await response.json()
   } catch {
-    throw new Error(`HTTP ${response.status}`)
+    throw new ApiRequestError(`HTTP ${response.status}`, response.status)
   }
 
   if (!response.ok || !payload.success || payload.data === undefined) {
-    throw new Error(payload.error || `HTTP ${response.status}`)
+    throw new ApiRequestError(payload.error || `HTTP ${response.status}`, response.status)
   }
 
   return payload.data

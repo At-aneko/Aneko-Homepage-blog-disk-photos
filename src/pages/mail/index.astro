@@ -1,0 +1,15 @@
+---
+import MailShell from '../../components/MailShell.vue'
+import WorkspaceLayout from '../../layouts/WorkspaceLayout.astro'
+
+export const prerender = false
+---
+
+<WorkspaceLayout
+  title="邮箱 - Aneko"
+  description="管理员通过 IMAP 和 SMTP 连接已有邮箱。"
+  product="mail"
+  keywords="Aneko,邮箱,Webmail,IMAP,SMTP"
+>
+  <MailShell client:load />
+</WorkspaceLayout>
