@@ -1176,7 +1176,7 @@ onBeforeUnmount(() => {
 .mailFolderList > button:disabled { opacity: 0.38; cursor: default; }
 .mailFolderList > button:disabled:hover { background: transparent; }
 .mailFolderList > button span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.mailFolderList > button b { min-width: 19px; height: 18px; padding: 0 5px; border-radius: 9px; display: grid; place-items: center; background: var(--module_dock_active_bg); font-size: 8px; font-weight: 600; }
+.mailFolderList > button b { min-width: 19px; height: 18px; padding: 0 5px; border-radius: 9px; display: grid; place-items: center; color: var(--module_dock_active_color); background: var(--module_dock_active_bg); font-size: 8px; font-weight: 600; }
 
 .mailPanelLoading,
 .mailMessageLoading { min-height: 0; overflow: hidden; }
