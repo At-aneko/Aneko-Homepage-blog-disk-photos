@@ -1015,6 +1015,18 @@ body {
   transition: transform 0.4s ease;
 }
 
+/* Match each asset's visible artwork to the cloud icon's main cloud body. */
+.projectItemRight img.projectIcon--blog,
+.projectItemRight img.projectIcon--mail {
+  height: 21px;
+  width: 21px;
+}
+
+.projectItemRight img.projectIcon--photo {
+  height: 30px;
+  width: 30px;
+}
+
 .externalLinksSection {
   margin-top: 26px;
 }

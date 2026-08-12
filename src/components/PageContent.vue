@@ -73,7 +73,13 @@
               <h1>{{ project.name }}</h1>
             </div>
             <div class="projectItemRight">
-              <img :src="project.img" alt="" loading="lazy" decoding="async" />
+              <img
+                :class="`projectIcon projectIcon--${project.id}`"
+                :src="project.img"
+                alt=""
+                loading="lazy"
+                decoding="async"
+              />
             </div>
           </a>
         </div>
@@ -209,10 +215,10 @@ function handleTabKeydown(event, currentIndex) {
 }
 
 const siteProjects = [
-  { name: '博客', url: '/blog/', img: '/static/svg/blog.svg', external: false },
-  { name: '云盘', url: '/drive/', img: '/static/svg/cloud.svg', external: false },
-  { name: '邮箱', url: '/mail/', img: '/static/svg/mail.svg', external: false },
-  { name: '相册', url: '/photos/', img: '/static/svg/photo.svg', external: false },
+  { id: 'blog', name: '博客', url: '/blog/', img: '/static/svg/blog.svg', external: false },
+  { id: 'cloud', name: '云盘', url: '/drive/', img: '/static/svg/cloud.svg', external: false },
+  { id: 'mail', name: '邮箱', url: '/mail/', img: '/static/svg/mail.svg', external: false },
+  { id: 'photo', name: '相册', url: '/photos/', img: '/static/svg/photo.svg', external: false },
 ]
 
 const externalLinks = [
