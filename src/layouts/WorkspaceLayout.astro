@@ -7,7 +7,7 @@ import SiteLayout from './SiteLayout.astro'
 interface Props {
   title: string
   description: string
-  product: 'photos' | 'drive'
+  product: 'photos' | 'drive' | 'mail'
   keywords?: string
 }
 
@@ -15,12 +15,15 @@ const {
   title,
   description,
   product,
-  keywords = 'Aneko,相册,云盘,Cloudflare,R2,KV',
+  keywords = 'Aneko,相册,云盘,邮箱,Cloudflare,R2,KV',
 } = Astro.props
 
-const breadcrumb = product === 'photos'
-  ? { name: '相册', path: '/photos/' }
-  : { name: '云盘', path: '/drive/' }
+const breadcrumbs = {
+  photos: { name: '相册', path: '/photos/' },
+  drive: { name: '云盘', path: '/drive/' },
+  mail: { name: '邮箱', path: '/mail/' },
+}
+const breadcrumb = breadcrumbs[product]
 ---
 
 <SiteLayout

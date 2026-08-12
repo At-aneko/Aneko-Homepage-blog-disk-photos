@@ -48,6 +48,11 @@ const products = {
     kicker: 'ANEKO / STORAGE',
     copy: '文件、目录与归档',
   },
+  mail: {
+    name: 'Mail',
+    kicker: 'ANEKO / MESSAGING',
+    copy: '邮件连接与自动通知',
+  },
 }
 
 const currentProduct = computed(() => products[props.product] || products.photos)

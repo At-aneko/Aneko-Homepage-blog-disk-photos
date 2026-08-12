@@ -45,6 +45,7 @@ export const GET: APIRoute = async () => {
     { path: '/blog/about/', lastmod: blogLastModified },
     { path: '/photos/' },
     { path: '/drive/' },
+    { path: '/mail/' },
   ]
 
   for (const post of posts) {

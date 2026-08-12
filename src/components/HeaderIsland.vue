@@ -8,7 +8,7 @@
     @open-search="searchOpen = true"
   />
   <WorkspaceHeader
-    v-else-if="page === 'photos' || page === 'drive'"
+    v-else-if="page === 'photos' || page === 'drive' || page === 'mail'"
     :product="page"
     :theme="theme"
     @toggle-theme="toggleTheme"

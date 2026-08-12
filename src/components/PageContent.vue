@@ -73,7 +73,14 @@
               <h1>{{ project.name }}</h1>
             </div>
             <div class="projectItemRight">
-              <img :src="project.img" alt="" loading="lazy" decoding="async" />
+              <Mail
+                v-if="project.icon === 'mail'"
+                class="projectItemIcon"
+                :size="39"
+                :stroke-width="1.7"
+                aria-hidden="true"
+              />
+              <img v-else :src="project.img" alt="" loading="lazy" decoding="async" />
             </div>
           </a>
         </div>
@@ -124,7 +131,7 @@
 
 <script setup>
 import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
-import { ExternalLink, Link2 } from '@lucide/vue'
+import { ExternalLink, Link2, Mail } from '@lucide/vue'
 import GitHubWidget from './GitHubWidget.vue'
 import TimeWidget from './TimeWidget.vue'
 import WeatherWidget from './WeatherWidget.vue'
@@ -211,7 +218,7 @@ function handleTabKeydown(event, currentIndex) {
 const siteProjects = [
   { name: '博客', url: '/blog/', img: '/static/svg/blog.svg', external: false },
   { name: '云盘', url: '/drive/', img: '/static/svg/disk.svg', external: false },
-  { name: '探针', url: 'https://tz.aneko.ink', img: '/static/svg/probe.svg', external: true },
+  { name: '邮箱', url: '/mail/', icon: 'mail', external: false },
   { name: '相册', url: '/photos/', img: '/static/img/album.webp', external: false },
 ]
 
@@ -219,5 +226,6 @@ const externalLinks = [
   { name: '相册', meta: 'photo.aneko.ink', url: 'https://photo.aneko.ink' },
   { name: '云盘', meta: 'disk.aneko.ink', url: 'https://disk.aneko.ink' },
   { name: '博客', meta: 'blog.aneko.ink', url: 'https://blog.aneko.ink' },
+  { name: '探针', meta: 'tz.aneko.ink', url: 'https://tz.aneko.ink' },
 ]
 </script>
