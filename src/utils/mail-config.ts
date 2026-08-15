@@ -1,27 +1,30 @@
+import { DEFAULT_MAIL_CONFIG_KV_KEY } from './runtime-config'
+import {
+  CONTROL_CHARACTER_PATTERN,
+  EMAIL_PATTERN,
+  MAIL_SUBJECT_MAX_LENGTH,
+  MAIL_TEXT_MAX_LENGTH,
+} from './mail-constants'
+
 const encoder = new TextEncoder()
 const decoder = new TextDecoder()
 
 const MAIL_CONFIG_AAD = encoder.encode('aneko:mail-config:v2')
-const MAIL_CONFIG_KEY = 'mail:config:v2'
-const STORED_SCHEMA_VERSION = 2
+const STORED_SCHEMA_VERSION = 2 as const
 const MAIL_WEBHOOK_AAD = encoder.encode('aneko:mail-webhook:v1')
 const MAIL_WEBHOOK_KEY = 'mail:webhook:v1'
-const WEBHOOK_STORED_SCHEMA_VERSION = 1
+const WEBHOOK_STORED_SCHEMA_VERSION = 1 as const
 const MAIL_WEBHOOK_V2_AAD = encoder.encode('aneko:mail-webhook:v2')
 const MAIL_WEBHOOK_V2_KEY = 'mail:webhook:v2'
-const WEBHOOK_V2_STORED_SCHEMA_VERSION = 2
+const WEBHOOK_V2_STORED_SCHEMA_VERSION = 2 as const
 const AES_GCM_IV_BYTES = 12
 const MAX_PASSWORD_LENGTH = 4096
 const MIN_WEBHOOK_TOKEN_LENGTH = 32
 const MAX_WEBHOOK_TOKEN_LENGTH = 256
 const MAX_WEBHOOK_RECIPIENTS = 20
-const MAX_WEBHOOK_SUBJECT_LENGTH = 998
-const MAX_WEBHOOK_TEXT_LENGTH = 200_000
 const WEBHOOK_TOKEN_PATTERN = /^[A-Za-z0-9._~-]+$/
 const HOSTNAME_PATTERN = /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/i
-const EMAIL_PATTERN = /^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/i
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
-const CONTROL_CHARACTER_PATTERN = /[\u0000-\u001f\u007f]/u
 const UNSAFE_HOST_SUFFIXES = ['.internal', '.lan', '.local', '.localhost', '.home', '.invalid', '.test']
 const WEBHOOK_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/
 const MAX_WEBHOOK_ITEMS = 50
@@ -29,12 +32,10 @@ const MAX_WEBHOOK_NAME_LENGTH = 100
 
 export const MAIL_REQUEST_MAX_BODY_BYTES = 2 * 1024 * 1024
 
-export interface MailBindings {
-  ANEKO_KV: KVNamespace
-  MAIL_CONFIG_ENCRYPTION_KEY?: string
-  MAIL_CONFIG_KV_KEY?: string
-  MAIL_ALLOWED_HOSTS?: string
-}
+export type MailBindings = Pick<
+  Env,
+  'ANEKO_KV' | 'MAIL_CONFIG_ENCRYPTION_KEY' | 'MAIL_CONFIG_KV_KEY' | 'MAIL_ALLOWED_HOSTS'
+>
 
 export interface MailConnectionConfig {
   host: string
@@ -78,9 +79,6 @@ export interface MailWebhookStore {
   endpoints: MailWebhookEndpoint[]
 }
 
-export type MailAdminWebhookTemplate = MailWebhookTemplate
-export type MailAdminWebhookEndpoint = Omit<MailWebhookEndpoint, 'token'> & { tokenConfigured: boolean }
-
 export interface MailConfiguration {
   configured: boolean
   revision: string | null
@@ -101,12 +99,8 @@ export interface MailAdminConfiguration {
   smtp: Omit<MailConnectionConfig, 'password'> & { passwordConfigured: boolean }
 }
 
-export type MailAdminWebhookConfiguration = Omit<MailWebhookConfiguration, 'token'> & {
-  tokenConfigured: boolean
-}
-
-interface EncryptedEnvelope {
-  schemaVersion: typeof STORED_SCHEMA_VERSION
+interface EncryptedEnvelope<Version extends number = number> {
+  schemaVersion: Version
   revision: string
   updatedAt: string
   algorithm: 'AES-256-GCM'
@@ -114,23 +108,9 @@ interface EncryptedEnvelope {
   ciphertext: string
 }
 
-interface EncryptedWebhookEnvelope {
-  schemaVersion: typeof WEBHOOK_STORED_SCHEMA_VERSION
-  revision: string
-  updatedAt: string
-  algorithm: 'AES-256-GCM'
-  iv: string
-  ciphertext: string
-}
-
-interface EncryptedWebhookV2Envelope {
-  schemaVersion: typeof WEBHOOK_V2_STORED_SCHEMA_VERSION
-  revision: string
-  updatedAt: string
-  algorithm: 'AES-256-GCM'
-  iv: string
-  ciphertext: string
-}
+type MailConfigEnvelope = EncryptedEnvelope<typeof STORED_SCHEMA_VERSION>
+type LegacyWebhookEnvelope = EncryptedEnvelope<typeof WEBHOOK_STORED_SCHEMA_VERSION>
+type WebhookStoreEnvelope = EncryptedEnvelope<typeof WEBHOOK_V2_STORED_SCHEMA_VERSION>
 
 type JsonRecord = Record<string, unknown>
 
@@ -327,8 +307,8 @@ function normalizeWebhook(value: unknown, existing: MailWebhookConfiguration) {
     token: webhookTokenField(input, existing.token),
     to: normalizeWebhookRecipients(input.to, 'webhook.to'),
     cc: normalizeWebhookRecipients(input.cc, 'webhook.cc'),
-    subject: webhookTemplateField(input, 'subject', MAX_WEBHOOK_SUBJECT_LENGTH),
-    text: webhookTemplateField(input, 'text', MAX_WEBHOOK_TEXT_LENGTH),
+    subject: webhookTemplateField(input, 'subject', MAIL_SUBJECT_MAX_LENGTH),
+    text: webhookTemplateField(input, 'text', MAIL_TEXT_MAX_LENGTH),
   }
   if (webhook.to.length + webhook.cc.length > MAX_WEBHOOK_RECIPIENTS) {
     validationError(`webhook supports at most ${MAX_WEBHOOK_RECIPIENTS} recipients`)
@@ -362,8 +342,8 @@ function normalizeWebhookTemplate(value: unknown): MailWebhookTemplate {
   return {
     id,
     name: webhookName(input.name, 'template.name'),
-    subject: webhookTemplateField(input, 'subject', MAX_WEBHOOK_SUBJECT_LENGTH),
-    text: webhookTemplateField(input, 'text', MAX_WEBHOOK_TEXT_LENGTH),
+    subject: webhookTemplateField(input, 'subject', MAIL_SUBJECT_MAX_LENGTH),
+    text: webhookTemplateField(input, 'text', MAIL_TEXT_MAX_LENGTH),
   }
 }
 
@@ -502,7 +482,7 @@ export function assertMailHostsAllowed(bindings: MailBindings, configuration: Ma
 }
 
 function getKvKey(bindings: MailBindings) {
-  return bindings.MAIL_CONFIG_KV_KEY?.trim() || MAIL_CONFIG_KEY
+  return bindings.MAIL_CONFIG_KV_KEY?.trim() || DEFAULT_MAIL_CONFIG_KV_KEY
 }
 
 function encodeBase64Url(bytes: Uint8Array) {
@@ -544,27 +524,24 @@ async function importEncryptionKey(value?: string) {
   )
 }
 
-async function encryptConfiguration(
-  configuration: MailConfiguration,
+async function encryptPayload<Version extends number>(
+  payload: unknown,
+  schemaVersion: Version,
+  additionalData: Uint8Array,
   revision: string,
   updatedAt: string,
   keyValue?: string,
-): Promise<EncryptedEnvelope> {
+): Promise<EncryptedEnvelope<Version>> {
   const iv = crypto.getRandomValues(new Uint8Array(AES_GCM_IV_BYTES))
   const key = await importEncryptionKey(keyValue)
-  const plaintext = encoder.encode(JSON.stringify({
-    address: configuration.address,
-    displayName: configuration.displayName,
-    imap: configuration.imap,
-    smtp: configuration.smtp,
-  }))
+  const plaintext = encoder.encode(JSON.stringify(payload))
   const ciphertext = await crypto.subtle.encrypt(
-    { name: 'AES-GCM', iv, additionalData: MAIL_CONFIG_AAD, tagLength: 128 },
+    { name: 'AES-GCM', iv, additionalData, tagLength: 128 },
     key,
     plaintext,
   )
   return {
-    schemaVersion: STORED_SCHEMA_VERSION,
+    schemaVersion,
     revision,
     updatedAt,
     algorithm: 'AES-256-GCM',
@@ -573,14 +550,16 @@ async function encryptConfiguration(
   }
 }
 
-function parseEnvelope(value: unknown): EncryptedEnvelope {
-  const input = asRecord(value, 'stored configuration')
-  assertKnownKeys(
-    input,
-    ['schemaVersion', 'revision', 'updatedAt', 'algorithm', 'iv', 'ciphertext'],
-    'stored configuration',
-  )
-  if (input.schemaVersion !== STORED_SCHEMA_VERSION
+const ENVELOPE_KEYS = ['schemaVersion', 'revision', 'updatedAt', 'algorithm', 'iv', 'ciphertext'] as const
+
+function parseEncryptedEnvelope<Version extends number>(
+  value: unknown,
+  schemaVersion: Version,
+  field: string,
+): EncryptedEnvelope<Version> {
+  const input = asRecord(value, field)
+  assertKnownKeys(input, ENVELOPE_KEYS, field)
+  if (input.schemaVersion !== schemaVersion
     || input.algorithm !== 'AES-256-GCM'
     || typeof input.revision !== 'string'
     || !UUID_PATTERN.test(input.revision)
@@ -590,21 +569,27 @@ function parseEnvelope(value: unknown): EncryptedEnvelope {
     || typeof input.ciphertext !== 'string') {
     throw new MailConfigUnavailableError()
   }
-  return input as unknown as EncryptedEnvelope
+  return input as unknown as EncryptedEnvelope<Version>
 }
 
-async function decryptConfiguration(envelope: EncryptedEnvelope, keyValue?: string) {
+function parseEnvelope(value: unknown): MailConfigEnvelope {
+  return parseEncryptedEnvelope<typeof STORED_SCHEMA_VERSION>(value, STORED_SCHEMA_VERSION, 'stored configuration')
+}
+
+async function decryptPayload(
+  envelope: EncryptedEnvelope,
+  additionalData: Uint8Array,
+  keyValue?: string,
+) {
   const iv = decodeBase64(envelope.iv)
   const ciphertext = decodeBase64(envelope.ciphertext)
-  if (iv.byteLength !== AES_GCM_IV_BYTES || ciphertext.byteLength < 16) {
-    throw new MailConfigUnavailableError()
-  }
+  if (iv.byteLength !== AES_GCM_IV_BYTES || ciphertext.byteLength < 16) throw new MailConfigUnavailableError()
   const key = await importEncryptionKey(keyValue)
-  const plaintext = await crypto.subtle.decrypt(
-    { name: 'AES-GCM', iv, additionalData: MAIL_CONFIG_AAD, tagLength: 128 },
-    key,
-    ciphertext,
-  )
+  return crypto.subtle.decrypt({ name: 'AES-GCM', iv, additionalData, tagLength: 128 }, key, ciphertext)
+}
+
+async function decryptConfiguration(envelope: MailConfigEnvelope, keyValue?: string) {
+  const plaintext = await decryptPayload(envelope, MAIL_CONFIG_AAD, keyValue)
   const parsed = JSON.parse(decoder.decode(plaintext)) as JsonRecord
   const base = emptyConfiguration()
   const configuration = normalizeConfiguration({ ...parsed, revision: envelope.revision }, base)
@@ -615,72 +600,59 @@ async function decryptConfiguration(envelope: EncryptedEnvelope, keyValue?: stri
   }
 }
 
-async function encryptWebhookConfiguration(
+function encryptConfiguration(
+  configuration: MailConfiguration,
+  revision: string,
+  updatedAt: string,
+  keyValue?: string,
+) {
+  return encryptPayload<typeof STORED_SCHEMA_VERSION>(
+    {
+      address: configuration.address,
+      displayName: configuration.displayName,
+      imap: configuration.imap,
+      smtp: configuration.smtp,
+    },
+    STORED_SCHEMA_VERSION,
+    MAIL_CONFIG_AAD,
+    revision,
+    updatedAt,
+    keyValue,
+  )
+}
+
+function encryptWebhookConfiguration(
   configuration: MailWebhookConfiguration,
   revision: string,
   updatedAt: string,
   keyValue?: string,
-): Promise<EncryptedWebhookEnvelope> {
-  const iv = crypto.getRandomValues(new Uint8Array(AES_GCM_IV_BYTES))
-  const key = await importEncryptionKey(keyValue)
-  const plaintext = encoder.encode(JSON.stringify({
-    enabled: configuration.enabled,
-    token: configuration.token,
-    to: configuration.to,
-    cc: configuration.cc,
-    subject: configuration.subject,
-    text: configuration.text,
-  }))
-  const ciphertext = await crypto.subtle.encrypt(
-    { name: 'AES-GCM', iv, additionalData: MAIL_WEBHOOK_AAD, tagLength: 128 },
-    key,
-    plaintext,
-  )
-  return {
-    schemaVersion: WEBHOOK_STORED_SCHEMA_VERSION,
+): Promise<LegacyWebhookEnvelope> {
+  return encryptPayload<typeof WEBHOOK_STORED_SCHEMA_VERSION>(
+    {
+      enabled: configuration.enabled,
+      token: configuration.token,
+      to: configuration.to,
+      cc: configuration.cc,
+      subject: configuration.subject,
+      text: configuration.text,
+    },
+    WEBHOOK_STORED_SCHEMA_VERSION,
+    MAIL_WEBHOOK_AAD,
     revision,
     updatedAt,
-    algorithm: 'AES-256-GCM',
-    iv: encodeBase64Url(iv),
-    ciphertext: encodeBase64Url(new Uint8Array(ciphertext)),
-  }
+    keyValue,
+  )
 }
 
-function parseWebhookEnvelope(value: unknown): EncryptedWebhookEnvelope {
-  const input = asRecord(value, 'stored webhook configuration')
-  assertKnownKeys(
-    input,
-    ['schemaVersion', 'revision', 'updatedAt', 'algorithm', 'iv', 'ciphertext'],
-    'stored webhook configuration',
-  )
-  if (input.schemaVersion !== WEBHOOK_STORED_SCHEMA_VERSION
-    || input.algorithm !== 'AES-256-GCM'
-    || typeof input.revision !== 'string'
-    || !UUID_PATTERN.test(input.revision)
-    || typeof input.updatedAt !== 'string'
-    || Number.isNaN(Date.parse(input.updatedAt))
-    || typeof input.iv !== 'string'
-    || typeof input.ciphertext !== 'string') {
-    throw new MailConfigUnavailableError()
-  }
-  return input as unknown as EncryptedWebhookEnvelope
+function parseWebhookEnvelope(value: unknown): LegacyWebhookEnvelope {
+  return parseEncryptedEnvelope<typeof WEBHOOK_STORED_SCHEMA_VERSION>(value, WEBHOOK_STORED_SCHEMA_VERSION, 'stored webhook configuration')
 }
 
 async function decryptWebhookConfiguration(
-  envelope: EncryptedWebhookEnvelope,
+  envelope: LegacyWebhookEnvelope,
   keyValue?: string,
 ) {
-  const iv = decodeBase64(envelope.iv)
-  const ciphertext = decodeBase64(envelope.ciphertext)
-  if (iv.byteLength !== AES_GCM_IV_BYTES || ciphertext.byteLength < 16) {
-    throw new MailConfigUnavailableError()
-  }
-  const key = await importEncryptionKey(keyValue)
-  const plaintext = await crypto.subtle.decrypt(
-    { name: 'AES-GCM', iv, additionalData: MAIL_WEBHOOK_AAD, tagLength: 128 },
-    key,
-    ciphertext,
-  )
+  const plaintext = await decryptPayload(envelope, MAIL_WEBHOOK_AAD, keyValue)
   const parsed = JSON.parse(decoder.decode(plaintext)) as JsonRecord
   const configuration = normalizeWebhook(
     { ...parsed, revision: envelope.revision },
@@ -693,53 +665,28 @@ async function decryptWebhookConfiguration(
   }
 }
 
-async function encryptWebhookStore(
+function encryptWebhookStore(
   store: MailWebhookStore,
   revision: string,
   updatedAt: string,
   keyValue?: string,
-): Promise<EncryptedWebhookV2Envelope> {
-  const iv = crypto.getRandomValues(new Uint8Array(AES_GCM_IV_BYTES))
-  const key = await importEncryptionKey(keyValue)
-  const plaintext = encoder.encode(JSON.stringify({ templates: store.templates, endpoints: store.endpoints }))
-  const ciphertext = await crypto.subtle.encrypt(
-    { name: 'AES-GCM', iv, additionalData: MAIL_WEBHOOK_V2_AAD, tagLength: 128 },
-    key,
-    plaintext,
-  )
-  return {
-    schemaVersion: WEBHOOK_V2_STORED_SCHEMA_VERSION,
+): Promise<WebhookStoreEnvelope> {
+  return encryptPayload<typeof WEBHOOK_V2_STORED_SCHEMA_VERSION>(
+    { templates: store.templates, endpoints: store.endpoints },
+    WEBHOOK_V2_STORED_SCHEMA_VERSION,
+    MAIL_WEBHOOK_V2_AAD,
     revision,
     updatedAt,
-    algorithm: 'AES-256-GCM',
-    iv: encodeBase64Url(iv),
-    ciphertext: encodeBase64Url(new Uint8Array(ciphertext)),
-  }
-}
-
-function parseWebhookV2Envelope(value: unknown): EncryptedWebhookV2Envelope {
-  const input = asRecord(value, 'stored webhook configuration')
-  assertKnownKeys(input, ['schemaVersion', 'revision', 'updatedAt', 'algorithm', 'iv', 'ciphertext'], 'stored webhook configuration')
-  if (input.schemaVersion !== WEBHOOK_V2_STORED_SCHEMA_VERSION
-    || input.algorithm !== 'AES-256-GCM'
-    || typeof input.revision !== 'string' || !UUID_PATTERN.test(input.revision)
-    || typeof input.updatedAt !== 'string' || Number.isNaN(Date.parse(input.updatedAt))
-    || typeof input.iv !== 'string' || typeof input.ciphertext !== 'string') {
-    throw new MailConfigUnavailableError()
-  }
-  return input as unknown as EncryptedWebhookV2Envelope
-}
-
-async function decryptWebhookStore(envelope: EncryptedWebhookV2Envelope, keyValue?: string): Promise<MailWebhookStore> {
-  const iv = decodeBase64(envelope.iv)
-  const ciphertext = decodeBase64(envelope.ciphertext)
-  if (iv.byteLength !== AES_GCM_IV_BYTES || ciphertext.byteLength < 16) throw new MailConfigUnavailableError()
-  const key = await importEncryptionKey(keyValue)
-  const plaintext = await crypto.subtle.decrypt(
-    { name: 'AES-GCM', iv, additionalData: MAIL_WEBHOOK_V2_AAD, tagLength: 128 },
-    key,
-    ciphertext,
+    keyValue,
   )
+}
+
+function parseWebhookV2Envelope(value: unknown): WebhookStoreEnvelope {
+  return parseEncryptedEnvelope<typeof WEBHOOK_V2_STORED_SCHEMA_VERSION>(value, WEBHOOK_V2_STORED_SCHEMA_VERSION, 'stored webhook configuration')
+}
+
+async function decryptWebhookStore(envelope: WebhookStoreEnvelope, keyValue?: string): Promise<MailWebhookStore> {
+  const plaintext = await decryptPayload(envelope, MAIL_WEBHOOK_V2_AAD, keyValue)
   const parsed = JSON.parse(decoder.decode(plaintext)) as JsonRecord
   const existing = emptyWebhookStore()
   const store = normalizeWebhookStore({ ...parsed, revision: envelope.revision }, existing)
@@ -777,7 +724,7 @@ export async function saveMailConfiguration(bindings: MailBindings, value: unkno
   return { ...configuration, revision, updatedAt }
 }
 
-export async function readMailWebhookConfiguration(
+async function readMailWebhookConfiguration(
   bindings: MailBindings,
 ): Promise<MailWebhookConfiguration> {
   const raw = await bindings.ANEKO_KV.get(MAIL_WEBHOOK_KEY)
@@ -789,25 +736,6 @@ export async function readMailWebhookConfiguration(
     if (error instanceof MailConfigUnavailableError) throw error
     throw new MailConfigUnavailableError()
   }
-}
-
-export async function saveMailWebhookConfiguration(bindings: MailBindings, value: unknown) {
-  const existing = await readMailWebhookConfiguration(bindings)
-  const expectedRevision = parseExpectedRevision(value)
-  if (expectedRevision !== existing.revision) {
-    throw new MailConfigConflictError('Webhook configuration has changed; reload and try again')
-  }
-  const configuration = normalizeWebhook(value, existing)
-  const revision = crypto.randomUUID()
-  const updatedAt = new Date().toISOString()
-  const envelope = await encryptWebhookConfiguration(
-    configuration,
-    revision,
-    updatedAt,
-    bindings.MAIL_CONFIG_ENCRYPTION_KEY,
-  )
-  await bindings.ANEKO_KV.put(MAIL_WEBHOOK_KEY, JSON.stringify(envelope))
-  return { ...configuration, revision, updatedAt }
 }
 
 function migrateLegacyWebhook(configuration: MailWebhookConfiguration): MailWebhookStore {
@@ -891,30 +819,6 @@ export async function saveMailWebhookStore(bindings: MailBindings, value: unknow
   return { ...store, revision, updatedAt }
 }
 
-export async function saveMailWebhookTemplates(bindings: MailBindings, value: unknown) {
-  const input = asRecord(value, 'body')
-  assertKnownKeys(input, ['revision', 'templates'], 'body')
-  if (!Array.isArray(input.templates)) validationError('body.templates must be an array')
-  const existing = await readMailWebhookStore(bindings)
-  return saveMailWebhookStore(bindings, {
-    revision: input.revision,
-    templates: input.templates,
-    endpoints: existing.endpoints,
-  })
-}
-
-export async function saveMailWebhookEndpoints(bindings: MailBindings, value: unknown) {
-  const input = asRecord(value, 'body')
-  assertKnownKeys(input, ['revision', 'endpoints'], 'body')
-  if (!Array.isArray(input.endpoints)) validationError('body.endpoints must be an array')
-  const existing = await readMailWebhookStore(bindings)
-  return saveMailWebhookStore(bindings, {
-    revision: input.revision,
-    templates: existing.templates,
-    endpoints: input.endpoints,
-  })
-}
-
 export function adminMailWebhookStore(store: MailWebhookStore) {
   const defaultEndpoint = store.endpoints.find((endpoint) => endpoint.id === 'default')
   const defaultTemplate = defaultEndpoint
@@ -991,20 +895,5 @@ export function adminMailConfiguration(configuration: MailConfiguration): MailAd
     displayName: configuration.displayName,
     imap: projectConnection(configuration.imap),
     smtp: projectConnection(configuration.smtp),
-  }
-}
-
-export function adminMailWebhookConfiguration(
-  configuration: MailWebhookConfiguration,
-): MailAdminWebhookConfiguration {
-  return {
-    revision: configuration.revision,
-    updatedAt: configuration.updatedAt,
-    enabled: configuration.enabled,
-    tokenConfigured: Boolean(configuration.token),
-    to: [...configuration.to],
-    cc: [...configuration.cc],
-    subject: configuration.subject,
-    text: configuration.text,
   }
 }

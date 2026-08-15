@@ -7,9 +7,10 @@ export const prerender = false
 
 export const GET: APIRoute = async ({ request }) => {
   try {
+    const bindings = getBindings()
     const url = new URL(request.url)
     const relativeKey = normalizeObjectPath(url.searchParams.get('key') || '')
-    const object = await getBindings().ANEKO_R2.get(`${getDrivePrefix(getBindings())}${relativeKey}`)
+    const object = await bindings.ANEKO_R2.get(`${getDrivePrefix(bindings)}${relativeKey}`)
     if (!object) return errorResponse('File not found', 404)
 
     return r2ObjectResponse(object, {

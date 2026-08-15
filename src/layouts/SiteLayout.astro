@@ -1,6 +1,7 @@
 ---
 import '../style.css'
 import { ClientRouter } from 'astro:transitions'
+import { SITE_ORIGIN } from '../utils/runtime-config'
 
 interface Props {
   title?: string
@@ -20,7 +21,6 @@ const {
 
 const enableClientRouter = loadingMode !== 'always'
 
-const SITE_ORIGIN = 'https://www.aneko.ink'
 const canonicalUrl = new URL(Astro.url.pathname, SITE_ORIGIN).href
 const websiteSchema = Astro.url.pathname === '/'
   ? {

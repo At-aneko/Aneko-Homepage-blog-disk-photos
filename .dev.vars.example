@@ -1,10 +1,14 @@
 # Local development placeholders only. Never put production secrets in this file.
 ACCESS_CODE=replace-with-a-local-admin-code
 TURNSTILE_SECRET=replace-with-turnstile-secret
-# Local Turnstile hostname allowlist; production uses www.aneko.ink.
-TURNSTILE_HOSTNAMES=localhost,127.0.0.1
 # Encrypts the saved IMAP/SMTP credentials. Use a separate random value locally.
 MAIL_CONFIG_ENCRYPTION_KEY=replace-with-a-local-mail-config-encryption-key
-# Optional local overrides. Add exact IMAP/SMTP hosts to restrict connections; empty uses platform limits only.
-MAIL_CONFIG_KV_KEY=mail:config:v2
-MAIL_ALLOWED_HOSTS=
+# Local Turnstile hostname override; production defaults to www.aneko.ink.
+TURNSTILE_HOSTNAMES=localhost,127.0.0.1
+
+# Optional overrides. Leave these commented to use the application defaults.
+# BLOG_INDEX_KEY=blog:index
+# PHOTO_MANIFEST_KEY=photos
+# DRIVE_PREFIX=drive/
+# MAIL_CONFIG_KV_KEY=mail:config:v2
+# MAIL_ALLOWED_HOSTS=imap.example.com,smtp.example.com

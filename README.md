@@ -178,6 +178,8 @@ Webhook 不需要新增 Cloudflare Worker 变量或 Secret；模板和接口配�
 | `PHOTO_MANIFEST_KEY` | Worker variable | 相册清单键，默认 `photos` |
 | `DRIVE_PREFIX` | Worker variable | 网盘对象前缀，默认 `drive/` |
 
+部署所需的敏感配置只有 `ACCESS_CODE`、`TURNSTILE_SECRET` 和 `MAIL_CONFIG_ENCRYPTION_KEY` 三个加密 Secret；`ASSETS`、`ANEKO_KV` 和 `ANEKO_R2` 是必需绑定。其余 Worker variable 都是可选覆盖项，省略即可使用代码中的默认值。三个 Secret 用途不同，不要为了减少数量而复用。
+
 当前生产环境的绑定目标如下；资源名称变更时，以 Cloudflare Worker 中的实际绑定为准。
 
 | Binding | 当前生产资源 |
@@ -185,7 +187,7 @@ Webhook 不需要新增 Cloudflare Worker 变量或 Secret；模板和接口配�
 | `ANEKO_R2` | `aneko-homepage-blog-disk-photos-aneko-r2` |
 | `ANEKO_KV` | `aneko-homepage-blog-disk-photos-aneko-kv` |
 
-绑定名称和默认键定义在 `wrangler.jsonc` 与 `src/utils/cloudflare.ts`。`wrangler.jsonc` 只保存非敏感变量，不包含 `TURNSTILE_SECRET` 或 `MAIL_CONFIG_ENCRYPTION_KEY`。不要把 Cloudflare API Token、真实 `ACCESS_CODE`、真实 `TURNSTILE_SECRET`、真实 `MAIL_CONFIG_ENCRYPTION_KEY`、邮箱密码、R2 凭据或 KV 凭据提交到仓库。
+绑定名称定义在 `wrangler.jsonc`，默认键和站点地址集中在 `src/utils/runtime-config.ts`。`wrangler.jsonc` 只保存绑定，不包含任何 Secret；可选 Worker 变量仅在需要覆盖默认值时配置。不要把 Cloudflare API Token、真实 `ACCESS_CODE`、真实 `TURNSTILE_SECRET`、真实 `MAIL_CONFIG_ENCRYPTION_KEY`、邮箱密码、R2 凭据或 KV 凭据提交到仓库。
 
 ### 数据位置
 
@@ -274,13 +276,14 @@ R2 本身没有空目录，因此创建文件夹时会写入 `drive/<folder>/.ke
 2. 进入 **Settings > Variables and Secrets**，将管理员访问码添加为加密 Secret `ACCESS_CODE`。
 3. 在同一页面将 Turnstile widget 的 secret key 添加为加密 Secret `TURNSTILE_SECRET`。不要使用公开 site key 代替，也不要把值写入仓库。
 4. 在同一页面为邮箱连接与 Webhook 配置添加独立的加密 Secret `MAIL_CONFIG_ENCRYPTION_KEY`。优先使用随机 32 字节的 Base64URL 值，不要复用管理员访问码或提交到仓库。
-5. 添加普通文本变量 `TURNSTILE_HOSTNAMES`，生产环境填写 `www.aneko.ink`。多个允许主机名使用英文逗号分隔。
-6. 可选添加普通文本变量 `MAIL_ALLOWED_HOSTS`，将邮箱连接限制为指定的 IMAP 与 SMTP 主机名，例如 `imap.example.com,smtp.example.com`。只填写准确主机名，不包含协议或端口；留空时管理员可以直接在邮箱页面配置通过主机名校验和 Cloudflare Socket 出站限制的服务器。
-7. 保留 `MAIL_CONFIG_KV_KEY=mail:config:v2`，或在尚未保存邮箱配置前按需修改。修改后原键中的配置不会自动迁移。
-8. 保留或按需修改 `BLOG_INDEX_KEY`、`PHOTO_MANIFEST_KEY` 和 `DRIVE_PREFIX`，然后部署 Worker 使变量生效。
-9. 在 **Settings > Domains & Routes** 中确认自定义域名 `www.aneko.ink` 已绑定到该 Worker。
+5. `TURNSTILE_HOSTNAMES` 可选；省略时默认只允许 `www.aneko.ink`，多个主机名使用英文逗号分隔。
+6. `MAIL_ALLOWED_HOSTS` 可选；填写准确的 IMAP/SMTP 主机名可启用白名单限制，省略时只应用主机名校验和 Cloudflare Socket 出站限制。
+7. `MAIL_CONFIG_KV_KEY`、`BLOG_INDEX_KEY`、`PHOTO_MANIFEST_KEY` 和 `DRIVE_PREFIX` 均为可选覆盖项，省略时分别使用 `mail:config:v2`、`blog:index`、`photos` 和 `drive/`。修改邮箱配置键前请先确认旧键中的数据已经迁移，应用不会自动迁移。
+8. 在 **Settings > Domains & Routes** 中确认自定义域名 `www.aneko.ink` 已绑定到该 Worker。
 
-Turnstile 的公开 site key 已直接集成在前端代码中，无需在 Worker 变量中重复配置。`wrangler.jsonc` 默认将 `MAIL_ALLOWED_HOSTS` 留空，便于管理员完全通过邮箱页面配置连接；需要固定邮箱服务商时，再在 Cloudflare 中填写精确白名单。仓库中的 `.dev.vars.example` 仅提供本地开发占位符；不要把生产 `TURNSTILE_SECRET`、`MAIL_CONFIG_ENCRYPTION_KEY` 或邮箱密码写入该示例文件。
+Turnstile 的公开 site key 已直接集成在前端代码中，无需在 Worker 变量中重复配置。省略 `MAIL_ALLOWED_HOSTS` 时，管理员可以通过邮箱页面配置符合安全校验的连接；需要固定邮箱服务商时，再在 Cloudflare 中填写精确白名单。仓库中的 `.dev.vars.example` 仅提供本地开发占位符；不要把生产 `TURNSTILE_SECRET`、`MAIL_CONFIG_ENCRYPTION_KEY` 或邮箱密码写入该示例文件。
+
+`wrangler.jsonc` 不再重复写入上述默认变量；如果 Cloudflare Dashboard 中已经配置了自定义键名、前缀或主机白名单，请继续保留这些自定义值。
 
 
 ## 项目结构

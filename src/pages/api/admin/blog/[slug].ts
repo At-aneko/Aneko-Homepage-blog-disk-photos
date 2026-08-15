@@ -2,6 +2,7 @@ import type { APIRoute } from 'astro'
 import { verifyAdminRequest } from '../../../../utils/auth'
 import { BLOG_BODY_PREFIX, BLOG_META_PREFIX, getBindings } from '../../../../utils/cloudflare'
 import { errorResponse, successResponse } from '../../../../utils/http'
+import { isValidBlogSlug } from '../../../../utils/blog-config'
 import {
   calculateReadingTime,
   getStoredPostMetadata,
@@ -12,8 +13,6 @@ import {
 
 export const prerender = false
 
-const SLUG_PATTERN = /^[\p{L}\p{N}]+(?:-[\p{L}\p{N}]+)*$/u
-const RESERVED_SLUGS = new Set(['about', 'archive', 'assets', 'page', 'tag'])
 const MAX_ARTICLE_BYTES = 2 * 1024 * 1024
 
 interface BlogPostInput {
@@ -46,25 +45,21 @@ function isoDate(value: unknown, field: string) {
   return date.toISOString()
 }
 
-async function isAuthorized(request: Request) {
-  const bindings = getBindings()
+async function isAuthorized(request: Request, bindings = getBindings()) {
   return verifyAdminRequest(request, bindings)
 }
 
-function isValidSlug(slug: string) {
-  return SLUG_PATTERN.test(slug) && !RESERVED_SLUGS.has(slug.toLocaleLowerCase('zh-CN'))
-}
-
 export const GET: APIRoute = async ({ params, request }) => {
-  if (!await isAuthorized(request)) return errorResponse('Unauthorized', 401)
+  const bindings = getBindings()
+  if (!await isAuthorized(request, bindings)) return errorResponse('Unauthorized', 401)
 
   const slug = params.slug?.trim() || ''
-  if (!isValidSlug(slug)) return errorResponse('Invalid article slug')
+  if (!isValidBlogSlug(slug)) return errorResponse('Invalid article slug')
 
   const metadata = await getStoredPostMetadata(slug)
   if (!metadata) return errorResponse('Article not found', 404)
 
-  const bodyObject = await getBindings().ANEKO_R2.get(metadata.bodyKey)
+  const bodyObject = await bindings.ANEKO_R2.get(metadata.bodyKey)
   if (!bodyObject) return errorResponse('Article body not found', 404)
 
   return successResponse({
@@ -74,10 +69,11 @@ export const GET: APIRoute = async ({ params, request }) => {
 }
 
 export const PUT: APIRoute = async ({ params, request }) => {
-  if (!await isAuthorized(request)) return errorResponse('Unauthorized', 401)
+  const bindings = getBindings()
+  if (!await isAuthorized(request, bindings)) return errorResponse('Unauthorized', 401)
 
   const slug = params.slug?.trim() || ''
-  if (!isValidSlug(slug)) return errorResponse('Invalid article slug')
+  if (!isValidBlogSlug(slug)) return errorResponse('Invalid article slug')
 
   const declaredLength = Number(request.headers.get('Content-Length') || 0)
   if (declaredLength > MAX_ARTICLE_BYTES) return errorResponse('Article is too large', 413)
@@ -114,7 +110,6 @@ export const PUT: APIRoute = async ({ params, request }) => {
       bodyKey,
     }
 
-    const bindings = getBindings()
     const index = await getStoredPostIndex()
     const nextIndex = [...index.filter((post) => post.slug !== slug), metadata]
 
@@ -133,12 +128,12 @@ export const PUT: APIRoute = async ({ params, request }) => {
 }
 
 export const DELETE: APIRoute = async ({ params, request }) => {
-  if (!await isAuthorized(request)) return errorResponse('Unauthorized', 401)
+  const bindings = getBindings()
+  if (!await isAuthorized(request, bindings)) return errorResponse('Unauthorized', 401)
 
   const slug = params.slug?.trim() || ''
-  if (!isValidSlug(slug)) return errorResponse('Invalid article slug')
+  if (!isValidBlogSlug(slug)) return errorResponse('Invalid article slug')
 
-  const bindings = getBindings()
   const index = await getStoredPostIndex()
   const existing = index.find((post) => post.slug === slug)
 

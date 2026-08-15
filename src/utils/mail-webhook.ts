@@ -1,11 +1,10 @@
 import type { MailWebhookConfiguration } from './mail-config'
 import { MailServiceInputError, parseSendMailInput, type SendMailInput } from './mail-service'
+import { MAIL_SUBJECT_MAX_LENGTH, MAIL_TEXT_MAX_LENGTH } from './mail-constants'
 
 const encoder = new TextEncoder()
 const TEMPLATE_PATTERN = /{{\s*([A-Za-z0-9_.-]+)\s*}}/g
 const IDEMPOTENCY_KEY_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{7,119}$/
-const MAX_RENDERED_SUBJECT_LENGTH = 998
-const MAX_RENDERED_TEXT_LENGTH = 200_000
 
 type JsonRecord = Record<string, unknown>
 
@@ -113,9 +112,9 @@ export function webhookMailInput(
     subject: renderTemplate(
       configuration.subject,
       data,
-      MAX_RENDERED_SUBJECT_LENGTH,
+      MAIL_SUBJECT_MAX_LENGTH,
       'subject',
     ),
-    text: renderTemplate(configuration.text, data, MAX_RENDERED_TEXT_LENGTH, 'text'),
+    text: renderTemplate(configuration.text, data, MAIL_TEXT_MAX_LENGTH, 'text'),
   })
 }

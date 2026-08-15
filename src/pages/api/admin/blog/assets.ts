@@ -2,10 +2,9 @@ import type { APIRoute } from 'astro'
 import { verifyAdminRequest } from '../../../../utils/auth'
 import { BLOG_ASSET_PREFIX, getBindings } from '../../../../utils/cloudflare'
 import { errorResponse, successResponse } from '../../../../utils/http'
+import { BLOG_SLUG_PATTERN } from '../../../../utils/blog-config'
 
 export const prerender = false
-
-const SLUG_PATTERN = /^[\p{L}\p{N}]+(?:-[\p{L}\p{N}]+)*$/u
 
 export const GET: APIRoute = async ({ request }) => {
   const bindings = getBindings()
@@ -14,7 +13,7 @@ export const GET: APIRoute = async ({ request }) => {
   }
 
   const slug = new URL(request.url).searchParams.get('slug')?.trim() || ''
-  if (!SLUG_PATTERN.test(slug)) return errorResponse('Invalid article slug')
+  if (!BLOG_SLUG_PATTERN.test(slug)) return errorResponse('Invalid article slug')
 
   const prefix = `${BLOG_ASSET_PREFIX}${slug}/`
   const assets: Array<{

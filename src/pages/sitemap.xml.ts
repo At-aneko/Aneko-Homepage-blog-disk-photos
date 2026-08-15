@@ -1,9 +1,8 @@
 import type { APIRoute } from 'astro'
 import { getPublishedPosts, getTagEntries, POSTS_PER_PAGE, type BlogPost } from '../utils/posts'
+import { SITE_ORIGIN } from '../utils/runtime-config'
 
 export const prerender = false
-
-const SITE_ORIGIN = 'https://www.aneko.ink'
 
 interface SitemapEntry {
   path: string

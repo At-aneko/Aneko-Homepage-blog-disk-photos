@@ -262,6 +262,7 @@ import {
 } from '@lucide/vue'
 import AdminLoginDialog from './AdminLoginDialog.vue'
 import { apiRequest, clearAdminAccess, restoreAdminAccess } from '../utils/admin-client'
+import { isValidBlogSlug } from '../utils/blog-config'
 
 interface StoredBlogPost {
   slug: string
@@ -304,9 +305,6 @@ interface BlogForm {
 }
 
 type ManagerStatus = 'loading' | 'ready' | 'error'
-
-const RESERVED_SLUGS = new Set(['about', 'archive', 'assets', 'page', 'tag'])
-const SLUG_PATTERN = /^[\p{L}\p{N}]+(?:-[\p{L}\p{N}]+)*$/u
 
 const posts = ref<StoredBlogPost[]>([])
 const isMounted = ref(false)
@@ -448,7 +446,7 @@ async function openEditEditor(slug: string) {
 }
 
 function validateSlug(slug: string) {
-  return SLUG_PATTERN.test(slug) && !RESERVED_SLUGS.has(slug.toLocaleLowerCase('zh-CN'))
+  return isValidBlogSlug(slug)
 }
 
 async function savePost() {

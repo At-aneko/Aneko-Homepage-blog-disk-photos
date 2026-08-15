@@ -1,20 +1,22 @@
 import { CFImap, type Email as ImapEmail, type Folder } from 'cf-imap'
 import { LogLevel, WorkerMailer } from 'worker-mailer'
 import type { MailBindings, MailConfiguration } from './mail-config'
+import {
+  CONTROL_CHARACTER_PATTERN,
+  EMAIL_PATTERN,
+  MAIL_SUBJECT_MAX_LENGTH,
+  MAIL_TEXT_MAX_LENGTH,
+} from './mail-constants'
 
 const MAX_MESSAGE_BYTES = 8 * 1024 * 1024
 const MAX_FOLDER_LENGTH = 512
 const MAX_LIST_LIMIT = 25
 const MAX_RECIPIENTS = 20
-const MAX_SUBJECT_LENGTH = 998
-const MAX_TEXT_LENGTH = 200_000
 const MAX_IDEMPOTENCY_KEY_LENGTH = 128
 const SEND_RATE_LIMIT = 10
 const SEND_RATE_WINDOW_SECONDS = 60
 const IDEMPOTENCY_TTL_SECONDS = 24 * 60 * 60
 const IDEMPOTENCY_PENDING_TTL_SECONDS = 24 * 60 * 60
-const EMAIL_PATTERN = /^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/i
-const CONTROL_CHARACTER_PATTERN = /[\u0000-\u001f\u007f]/u
 const IDEMPOTENCY_KEY_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/
 
 type JsonRecord = Record<string, unknown>
@@ -418,11 +420,11 @@ export function parseSendMailInput(value: unknown): SendMailInput {
     throw new MailServiceInputError(`between 1 and ${MAX_RECIPIENTS} recipients are required`)
   }
   if (typeof input.subject !== 'string'
-    || input.subject.length > MAX_SUBJECT_LENGTH
+    || input.subject.length > MAIL_SUBJECT_MAX_LENGTH
     || CONTROL_CHARACTER_PATTERN.test(input.subject)) {
     throw new MailServiceInputError('body.subject is invalid')
   }
-  if (typeof input.text !== 'string' || !input.text || input.text.length > MAX_TEXT_LENGTH) {
+  if (typeof input.text !== 'string' || !input.text || input.text.length > MAIL_TEXT_MAX_LENGTH) {
     throw new MailServiceInputError('body.text is invalid')
   }
   return { idempotencyKey, to, cc, subject: input.subject, text: input.text }

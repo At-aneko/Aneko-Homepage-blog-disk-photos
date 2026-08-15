@@ -1,5 +1,6 @@
+import { DEFAULT_TURNSTILE_HOSTNAME } from './runtime-config'
+
 const SITEVERIFY_URL = 'https://challenges.cloudflare.com/turnstile/v0/siteverify'
-const DEFAULT_HOSTNAME = 'www.aneko.ink'
 const MAX_TOKEN_LENGTH = 2048
 const VERIFY_TIMEOUT_MS = 10_000
 
@@ -10,7 +11,7 @@ interface SiteverifyResponse {
 }
 
 function expectedHostnames(bindings: Env) {
-  const configured = (bindings.TURNSTILE_HOSTNAMES || DEFAULT_HOSTNAME)
+  const configured = (bindings.TURNSTILE_HOSTNAMES?.trim() || DEFAULT_TURNSTILE_HOSTNAME)
     .split(',')
     .map((hostname) => hostname.trim().toLowerCase())
     .filter(Boolean)
