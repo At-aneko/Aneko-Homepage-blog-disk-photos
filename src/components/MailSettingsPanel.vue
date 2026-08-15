@@ -132,75 +132,61 @@
             <Webhook :size="18" :stroke-width="1.7" aria-hidden="true" />
             <span><p>OUTBOUND WEBHOOK</p><h4>Webhook 发信</h4></span>
           </div>
-          <label class="mailWebhookToggle">
-            <input v-model="form.webhook.enabled" type="checkbox" />
-            <span>{{ form.webhook.enabled ? '已启用' : '未启用' }}</span>
-          </label>
+          <span class="mailWebhookSummary">{{ form.webhook.endpoints.length }} 个接口 · {{ form.webhook.templates.length }} 个模板</span>
         </header>
-
-        <div class="mailWebhookGrid">
-          <label class="mailField is-wide">
-            <span>接口地址</span>
-            <div class="mailWebhookEndpoint">
-              <input value="/api/mail/webhook" type="text" readonly />
-              <button type="button" title="复制接口地址" aria-label="复制接口地址" @click="copyWebhookEndpoint">
-                <Copy :size="15" :stroke-width="1.7" aria-hidden="true" />
+        <div class="mailWebhookWorkspace">
+          <section class="mailWebhookBlock">
+            <header class="mailWebhookBlockHeader">
+              <div><p>TEMPLATES</p><h5>模板库</h5></div>
+              <button type="button" class="mailIconTextButton" title="新增模板" @click="addTemplate">
+                <Plus :size="14" :stroke-width="1.8" aria-hidden="true" /><span>新增模板</span>
               </button>
+            </header>
+            <div class="mailWebhookCards">
+              <article v-for="template in form.webhook.templates" :key="template.id" class="mailWebhookCard">
+                <header class="mailWebhookCardHeader">
+                  <label class="mailWebhookNameField"><span>模板名称</span><input v-model.trim="template.name" type="text" maxlength="100" /></label>
+                  <button type="button" class="mailIconButton is-danger" :disabled="template.id === 'default' || form.webhook.templates.length <= 1" title="删除模板" aria-label="删除模板" @click="removeTemplate(template.id)">
+                    <Trash2 :size="14" :stroke-width="1.8" aria-hidden="true" />
+                  </button>
+                </header>
+                <div class="mailWebhookIdRow"><span>模板标识</span><code>{{ template.id }}</code></div>
+                <label class="mailField"><span>主题模板</span><input v-model="template.subject" type="text" maxlength="998" /></label>
+                <label class="mailField"><span>正文模板</span><textarea v-model="template.text" maxlength="200000"></textarea></label>
+              </article>
             </div>
-          </label>
-
-          <label class="mailField is-wide">
-            <span>Bearer Token</span>
-            <div class="mailWebhookTokenInput">
-              <input
-                v-model="form.webhook.token"
-                :type="showWebhookToken ? 'text' : 'password'"
-                autocomplete="new-password"
-                :disabled="form.webhook.clearToken"
-                maxlength="256"
-                :placeholder="form.webhook.tokenConfigured ? '留空以保留已保存 Token' : '生成或输入至少 32 个字符的 Token'"
-              />
-              <button type="button" :title="showWebhookToken ? '隐藏 Token' : '显示 Token'" :aria-label="showWebhookToken ? '隐藏 Token' : '显示 Token'" @click="showWebhookToken = !showWebhookToken">
-                <EyeOff v-if="showWebhookToken" :size="15" :stroke-width="1.7" aria-hidden="true" />
-                <Eye v-else :size="15" :stroke-width="1.7" aria-hidden="true" />
-              </button>
-              <button type="button" title="复制 Token" aria-label="复制 Token" :disabled="!form.webhook.token" @click="copyWebhookToken">
-                <Copy :size="15" :stroke-width="1.7" aria-hidden="true" />
-              </button>
-              <button type="button" title="生成新 Token" aria-label="生成新 Token" @click="generateWebhookToken">
-                <RefreshCw :size="15" :stroke-width="1.7" aria-hidden="true" />
-              </button>
+            <div class="mailTemplateVariables" aria-label="模板变量">
+              <span>变量</span><code v-pre>{{json}}</code><code v-pre>{{timestamp}}</code><code v-pre>{{event}}</code><code v-pre>{{user.name}}</code>
             </div>
-            <span class="mailCredentialState">
-              <small>{{ webhookTokenState() }}</small>
-              <label v-if="form.webhook.tokenConfigured"><input v-model="form.webhook.clearToken" type="checkbox" @change="handleClearWebhookToken" />清除 Token</label>
-            </span>
-          </label>
+          </section>
 
-          <label class="mailField">
-            <span>固定收件人</span>
-            <input v-model.trim="form.webhook.to" type="text" autocomplete="off" placeholder="name@example.com" />
-          </label>
-          <label class="mailField">
-            <span>固定抄送</span>
-            <input v-model.trim="form.webhook.cc" type="text" autocomplete="off" placeholder="多个地址用逗号分隔" />
-          </label>
-          <label class="mailField is-wide">
-            <span>主题模板</span>
-            <input v-model="form.webhook.subject" type="text" maxlength="998" autocomplete="off" />
-          </label>
-          <label class="mailField is-wide is-template">
-            <span>正文模板</span>
-            <textarea v-model="form.webhook.text" maxlength="200000"></textarea>
-          </label>
-        </div>
-
-        <div class="mailTemplateVariables" aria-label="模板变量">
-          <span>模板变量</span>
-          <code v-pre>{{json}}</code>
-          <code v-pre>{{timestamp}}</code>
-          <code v-pre>{{event}}</code>
-          <code v-pre>{{user.name}}</code>
+          <section class="mailWebhookBlock">
+            <header class="mailWebhookBlockHeader">
+              <div><p>ENDPOINTS</p><h5>Webhook 接口</h5></div>
+              <button type="button" class="mailIconTextButton" title="新增接口" @click="addEndpoint">
+                <Plus :size="14" :stroke-width="1.8" aria-hidden="true" /><span>新增接口</span>
+              </button>
+            </header>
+            <div class="mailWebhookCards">
+              <article v-for="endpoint in form.webhook.endpoints" :key="endpoint.id" class="mailWebhookCard">
+                <header class="mailWebhookCardHeader">
+                  <label class="mailWebhookNameField"><span>接口名称</span><input v-model.trim="endpoint.name" type="text" maxlength="100" /></label>
+                  <label class="mailWebhookToggle"><input v-model="endpoint.enabled" type="checkbox" /><span>{{ endpoint.enabled ? '已启用' : '未启用' }}</span></label>
+                  <button type="button" class="mailIconButton is-danger" :disabled="endpoint.id === 'default' || form.webhook.endpoints.length <= 1" title="删除接口" aria-label="删除接口" @click="removeEndpoint(endpoint.id)">
+                    <Trash2 :size="14" :stroke-width="1.8" aria-hidden="true" />
+                  </button>
+                </header>
+                <div class="mailWebhookControlGrid">
+                  <div class="mailField"><span>接口标识</span><code class="mailWebhookIdValue">{{ endpoint.id }}</code></div>
+                  <label class="mailField"><span>使用模板</span><select v-model="endpoint.templateId"><option v-for="template in form.webhook.templates" :key="template.id" :value="template.id">{{ template.name }}</option></select></label>
+                  <label class="mailField is-wide"><span>接口地址</span><div class="mailWebhookUrl"><input :value="webhookUrl(endpoint.id)" type="text" readonly /><button type="button" class="mailIconButton" title="复制接口地址" aria-label="复制接口地址" @click="copyWebhookEndpoint(endpoint.id)"><Copy :size="14" :stroke-width="1.8" aria-hidden="true" /></button></div></label>
+                  <label class="mailField is-wide"><span>Bearer Token</span><div class="mailWebhookTokenInput"><input v-model="endpoint.token" :type="webhookTokenType(endpoint.id)" maxlength="256" autocomplete="new-password" :disabled="endpoint.clearToken" :placeholder="endpoint.tokenConfigured ? '留空以保留已保存 Token' : '生成或输入至少 32 个字符'" /><button type="button" class="mailIconButton" :title="webhookTokenType(endpoint.id) === 'password' ? '显示 Token' : '隐藏 Token'" :aria-label="webhookTokenType(endpoint.id) === 'password' ? '显示 Token' : '隐藏 Token'" @click="toggleWebhookToken(endpoint.id)"><Eye v-if="webhookTokenType(endpoint.id) === 'password'" :size="14" :stroke-width="1.8" aria-hidden="true" /><EyeOff v-else :size="14" :stroke-width="1.8" aria-hidden="true" /></button><button type="button" class="mailIconButton" :disabled="!endpoint.token" title="复制 Token" aria-label="复制 Token" @click="copyWebhookToken(endpoint.id)"><Copy :size="14" :stroke-width="1.8" aria-hidden="true" /></button><button type="button" class="mailIconButton" title="生成新 Token" aria-label="生成新 Token" @click="generateWebhookToken(endpoint)"><RefreshCw :size="14" :stroke-width="1.8" aria-hidden="true" /></button></div><span class="mailCredentialState"><small>{{ webhookTokenState(endpoint) }}</small><label v-if="endpoint.tokenConfigured"><input v-model="endpoint.clearToken" type="checkbox" @change="handleClearWebhookToken(endpoint)" />清除 Token</label></span></label>
+                  <label class="mailField"><span>固定收件人</span><input v-model.trim="endpoint.to" type="text" autocomplete="off" placeholder="name@example.com" /></label>
+                  <label class="mailField"><span>固定抄送</span><input v-model.trim="endpoint.cc" type="text" autocomplete="off" placeholder="多个地址用逗号分隔" /></label>
+                </div>
+              </article>
+            </div>
+          </section>
         </div>
       </section>
 
@@ -223,7 +209,7 @@
 
 <script setup lang="ts">
 import { reactive, ref, watch } from 'vue'
-import { Copy, Eye, EyeOff, Inbox, LoaderCircle, LockKeyhole, PlugZap, RefreshCw, Save, Send, ShieldCheck, Webhook } from '@lucide/vue'
+import { Copy, Eye, EyeOff, Inbox, LoaderCircle, LockKeyhole, PlugZap, Plus, RefreshCw, Save, Send, ShieldCheck, Trash2, Webhook } from '@lucide/vue'
 import { ApiRequestError, apiRequest } from '../utils/admin-client'
 
 interface MailProtocolConfig {
@@ -247,12 +233,22 @@ interface MailConfig {
 interface MailWebhookConfig {
   revision: string | null
   updatedAt: string | null
+  templates: MailWebhookTemplate[]
+  endpoints: MailWebhookEndpoint[]
+}
+interface MailWebhookTemplate { id: string; name: string; subject: string; text: string }
+interface MailWebhookEndpoint { id: string; name: string; enabled: boolean; tokenConfigured: boolean; to: string[]; cc: string[]; templateId: string }
+
+interface EditableWebhookEndpoint {
+  id: string
+  name: string
   enabled: boolean
   tokenConfigured: boolean
-  to: string[]
-  cc: string[]
-  subject: string
-  text: string
+  templateId: string
+  token: string
+  clearToken: boolean
+  to: string
+  cc: string
 }
 
 interface EditableProtocol extends MailProtocolConfig {
@@ -269,14 +265,8 @@ interface ConfigForm {
 }
 
 interface EditableWebhook {
-  enabled: boolean
-  tokenConfigured: boolean
-  token: string
-  clearToken: boolean
-  to: string
-  cc: string
-  subject: string
-  text: string
+  templates: MailWebhookTemplate[]
+  endpoints: EditableWebhookEndpoint[]
 }
 
 interface ProtocolPayload {
@@ -306,7 +296,7 @@ const saving = ref(false)
 const formError = ref('')
 const showImapPassword = ref(false)
 const showSmtpPassword = ref(false)
-const showWebhookToken = ref(false)
+const showWebhookTokens = reactive<Record<string, boolean>>({})
 const testingTarget = ref<TestTarget | ''>('')
 const testState = reactive<Record<TestTarget, { kind: '' | 'success' | 'error'; message: string }>>({
   imap: { kind: '', message: '' },
@@ -327,34 +317,39 @@ function emptyForm(): ConfigForm {
     imap: protocolDefaults(993),
     smtp: protocolDefaults(465),
     webhook: {
-      enabled: false,
-      tokenConfigured: false,
-      token: '',
-      clearToken: false,
-      to: '',
-      cc: '',
-      subject: 'Webhook notification',
-      text: '{{json}}',
+      templates: [{ id: 'default', name: '默认模板', subject: 'Webhook notification', text: '{{json}}' }],
+      endpoints: [{ id: 'default', name: '默认接口', enabled: false, tokenConfigured: false, token: '', clearToken: false, to: '', cc: '', templateId: 'default' }],
     },
   }
 }
 
 function hydrate(value: MailConfig | null) {
   latestMailConfig = value
-  latestWebhookConfig = value?.webhook || null
   form.address = value?.address || ''
   form.displayName = value?.displayName || ''
   Object.assign(form.imap, protocolDefaults(993), value?.imap || {}, { port: 993, password: '', clearPassword: false })
   Object.assign(form.smtp, protocolDefaults(465), value?.smtp || {}, { port: 465, password: '', clearPassword: false })
-  Object.assign(form.webhook, emptyForm().webhook, value?.webhook || {}, {
-    token: '',
-    clearToken: false,
-    to: (value?.webhook?.to || []).join(', '),
-    cc: (value?.webhook?.cc || []).join(', '),
-  })
+  hydrateWebhook(value?.webhook || null)
   formError.value = ''
   testState.imap = { kind: '', message: '' }
   testState.smtp = { kind: '', message: '' }
+}
+
+function hydrateWebhook(value: MailWebhookConfig | null) {
+  latestWebhookConfig = value
+  form.webhook.templates = (value?.templates || []).map((item) => ({ ...item }))
+  form.webhook.endpoints = (value?.endpoints || []).map((item) => ({
+    ...item,
+    token: '',
+    clearToken: false,
+    to: item.to.join(', '),
+    cc: item.cc.join(', '),
+  }))
+  if (!form.webhook.templates.length) form.webhook.templates = emptyForm().webhook.templates
+  if (!form.webhook.endpoints.length) form.webhook.endpoints = emptyForm().webhook.endpoints
+  for (const id of Object.keys(showWebhookTokens)) {
+    if (!form.webhook.endpoints.some((endpoint) => endpoint.id === id)) delete showWebhookTokens[id]
+  }
 }
 
 function authHeaders() {
@@ -371,27 +366,47 @@ function handleClearPassword(protocol: EditableProtocol) {
   if (protocol.clearPassword) protocol.password = ''
 }
 
-function handleClearWebhookToken() {
-  if (form.webhook.clearToken) form.webhook.token = ''
+function webhookPath(id: string) {
+  return id === 'default' ? '/api/mail/webhook' : `/api/mail/webhook/${encodeURIComponent(id)}`
 }
 
-function webhookTokenState() {
-  if (form.webhook.clearToken) return '保存后清除 Token'
-  if (form.webhook.token) return form.webhook.tokenConfigured ? '将轮换已保存 Token' : '将保存新 Token'
-  return form.webhook.tokenConfigured ? 'Token 已加密保存' : '尚未设置 Token'
+function webhookUrl(id: string) {
+  return webhookPath(id)
 }
 
-function generateWebhookToken() {
+function uniqueId(prefix: string, values: Array<{ id: string }>, reserved: Array<{ id: string }> = []) {
+  const ids = new Set([...values, ...reserved].map((item) => item.id))
+  let index = 1
+  let id = prefix
+  while (ids.has(id)) id = `${prefix}-${index++}`
+  return id
+}
+
+function generateWebhookToken(endpoint: EditableWebhookEndpoint) {
   const bytes = crypto.getRandomValues(new Uint8Array(32))
   let binary = ''
   for (const byte of bytes) binary += String.fromCharCode(byte)
-  form.webhook.token = btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '')
-  form.webhook.clearToken = false
-  showWebhookToken.value = true
+  endpoint.token = btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '')
+  endpoint.clearToken = false
+  showWebhookTokens[endpoint.id] = true
 }
 
-async function copyWebhookEndpoint() {
-  const endpoint = new URL('/api/mail/webhook', window.location.origin).toString()
+function webhookTokenType(id: string) { return showWebhookTokens[id] ? 'text' : 'password' }
+
+function toggleWebhookToken(id: string) { showWebhookTokens[id] = !showWebhookTokens[id] }
+
+function handleClearWebhookToken(endpoint: EditableWebhookEndpoint) {
+  if (endpoint.clearToken) endpoint.token = ''
+}
+
+function webhookTokenState(endpoint: EditableWebhookEndpoint) {
+  if (endpoint.clearToken) return '保存后清除 Token'
+  if (endpoint.token) return endpoint.tokenConfigured ? '将轮换已保存 Token' : '将保存新 Token'
+  return endpoint.tokenConfigured ? 'Token 已加密保存' : '尚未设置 Token'
+}
+
+async function copyWebhookEndpoint(id = 'default') {
+  const endpoint = new URL(webhookPath(id), window.location.origin).toString()
   try {
     await navigator.clipboard.writeText(endpoint)
     emit('notice', 'Webhook 地址已复制')
@@ -400,10 +415,11 @@ async function copyWebhookEndpoint() {
   }
 }
 
-async function copyWebhookToken() {
-  if (!form.webhook.token) return
+async function copyWebhookToken(id: string) {
+  const token = form.webhook.endpoints.find((endpoint) => endpoint.id === id)?.token
+  if (!token) return
   try {
-    await navigator.clipboard.writeText(form.webhook.token)
+    await navigator.clipboard.writeText(token)
     emit('notice', 'Webhook Token 已复制')
   } catch {
     emit('notice', '无法访问剪贴板，请手动复制', 'error')
@@ -425,22 +441,33 @@ function validateForm() {
   if (form.imap.clearPassword !== form.smtp.clearPassword) {
     throw new Error('清除配置时请同时清除 IMAP 和 SMTP 密码')
   }
-  const recipients = parseRecipients(form.webhook.to)
-  const cc = parseRecipients(form.webhook.cc)
-  if (recipients.length + cc.length > 20) throw new Error('Webhook 收件人和抄送合计不能超过 20 个')
-  if (form.webhook.enabled) {
-    if (!recipients.length) throw new Error('启用 Webhook 前请填写固定收件人')
-    if (form.webhook.clearToken || (!form.webhook.tokenConfigured && !form.webhook.token)) {
-      throw new Error('启用 Webhook 前请生成或填写 Token')
+  if (!form.webhook.templates.length) throw new Error('请至少保留一个模板')
+  const idPattern = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/
+  const templateIds = new Set<string>()
+  for (const item of form.webhook.templates) {
+    if (!idPattern.test(item.id) || templateIds.has(item.id)) throw new Error('模板标识必须唯一且只含英文字母、数字、点、下划线或连字符')
+    if (!item.name.trim() || item.name.length > 100 || !item.subject.trim() || item.subject.length > 998 || /[\u0000-\u001f\u007f]/u.test(item.subject)) {
+      throw new Error('模板名称或主题模板无效')
     }
+    if (!item.text.trim() || item.text.length > 200000) throw new Error('模板正文无效')
+    templateIds.add(item.id)
   }
-  if (form.webhook.token && (form.webhook.token.length < 32
-    || form.webhook.token.length > 256
-    || !/^[A-Za-z0-9._~-]+$/.test(form.webhook.token))) {
-    throw new Error('Webhook Token 需为 32–256 个英文字母、数字、点、下划线、波浪号或连字符')
+  if (!form.webhook.endpoints.length) throw new Error('请至少保留一个接口')
+  const endpointIds = new Set<string>()
+  for (const item of form.webhook.endpoints) {
+    if (!idPattern.test(item.id) || endpointIds.has(item.id)) throw new Error('接口标识必须唯一且只含英文字母、数字、点、下划线或连字符')
+    if (!item.name.trim() || item.name.length > 100 || !templateIds.has(item.templateId)) throw new Error('接口名称或模板选择无效')
+    const recipients = parseRecipients(item.to)
+    const cc = parseRecipients(item.cc)
+    if (recipients.length + cc.length > 20) throw new Error(`接口“${item.name}”的收件人和抄送不能超过 20 个`)
+    if (item.enabled && (!recipients.length || (item.clearToken || (!item.tokenConfigured && !item.token)))) {
+      throw new Error(`启用接口“${item.name}”前请填写收件人并设置 Token`)
+    }
+    if (item.token && (item.token.length < 32 || item.token.length > 256 || !/^[A-Za-z0-9._~-]+$/.test(item.token))) {
+      throw new Error(`接口“${item.name}”的 Token 需为 32–256 个英文字母、数字、点、下划线、波浪号或连字符`)
+    }
+    endpointIds.add(item.id)
   }
-  if (!form.webhook.subject.trim()) throw new Error('请填写 Webhook 主题模板')
-  if (!form.webhook.text.trim()) throw new Error('请填写 Webhook 正文模板')
 }
 
 function parseRecipients(value: string) {
@@ -469,17 +496,26 @@ function configPayload(includeRevision = true) {
 }
 
 function webhookPayload() {
-  const result: Record<string, unknown> = {
+  return {
     revision: latestWebhookConfig?.revision ?? null,
-    enabled: form.webhook.enabled,
-    to: parseRecipients(form.webhook.to),
-    cc: parseRecipients(form.webhook.cc),
-    subject: form.webhook.subject,
-    text: form.webhook.text,
+    templates: form.webhook.templates.map((item) => ({
+      id: item.id,
+      name: item.name.trim(),
+      subject: item.subject,
+      text: item.text,
+    })),
+    endpoints: form.webhook.endpoints.map((item) => ({
+      id: item.id,
+      name: item.name.trim(),
+      enabled: item.enabled,
+      to: parseRecipients(item.to),
+      cc: parseRecipients(item.cc),
+      templateId: item.templateId,
+      ...(item.clearToken || (!item.tokenConfigured && !item.token)
+        ? { token: null }
+        : item.token ? { token: item.token } : {}),
+    })),
   }
-  if (form.webhook.clearToken) result.token = null
-  else if (form.webhook.token) result.token = form.webhook.token
-  return result
 }
 
 async function testConnection(target: TestTarget) {
@@ -536,14 +572,7 @@ async function saveConfig() {
     Object.assign(form.smtp, mailResult.value.smtp, { password: '', clearPassword: false })
   }
   if (webhookResult.status === 'fulfilled') {
-    latestWebhookConfig = webhookResult.value
-    Object.assign(form.webhook, {
-      ...webhookResult.value,
-      token: '',
-      clearToken: false,
-      to: webhookResult.value.to.join(', '),
-      cc: webhookResult.value.cc.join(', '),
-    })
+    hydrateWebhook(webhookResult.value)
   }
 
   const failures: string[] = []
@@ -581,13 +610,47 @@ function emptyWebhookConfig(): MailWebhookConfig {
   return {
     revision: null,
     updatedAt: null,
+    templates: [{ id: 'default', name: '默认模板', subject: 'Webhook notification', text: '{{json}}' }],
+    endpoints: [{ id: 'default', name: '默认接口', enabled: false, tokenConfigured: false, to: [], cc: [], templateId: 'default' }],
+  }
+}
+
+function addTemplate() {
+  const id = uniqueId('template', form.webhook.templates, latestWebhookConfig?.templates)
+  form.webhook.templates.push({ id, name: '新模板', subject: 'Webhook notification', text: '{{json}}' })
+}
+
+function removeTemplate(id: string) {
+  if (id === 'default' || form.webhook.templates.length <= 1) return
+  form.webhook.templates = form.webhook.templates.filter((item) => item.id !== id)
+  const fallback = form.webhook.templates[0]?.id
+  if (fallback) {
+    form.webhook.endpoints.forEach((item) => {
+      if (item.templateId === id) item.templateId = fallback
+    })
+  }
+}
+
+function addEndpoint() {
+  const id = uniqueId('endpoint', form.webhook.endpoints, latestWebhookConfig?.endpoints)
+  const templateId = form.webhook.templates[0]?.id || 'default'
+  form.webhook.endpoints.push({
+    id,
+    name: '新接口',
     enabled: false,
     tokenConfigured: false,
-    to: [],
-    cc: [],
-    subject: 'Webhook notification',
-    text: '{{json}}',
-  }
+    token: '',
+    clearToken: false,
+    to: '',
+    cc: '',
+    templateId,
+  })
+}
+
+function removeEndpoint(id: string) {
+  if (id === 'default' || form.webhook.endpoints.length <= 1) return
+  delete showWebhookTokens[id]
+  form.webhook.endpoints = form.webhook.endpoints.filter((item) => item.id !== id)
 }
 
 function requestError(error: unknown, fallback: string, notifyUnauthorized = true) {
@@ -652,20 +715,44 @@ watch(() => props.config, (value) => {
 .mailWebhookSettings { padding: 24px 2px 22px; border-bottom: 1px solid var(--module_dock_border); }
 .mailWebhookSettings > header { min-height: 40px; display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
 .mailWebhookSettings h4 { margin: 3px 0 0; font-size: 14px; line-height: 20px; }
+.mailWebhookSummary { color: var(--weather_dialog_muted); font-size: 9px; line-height: 20px; }
+.mailWebhookWorkspace { margin-top: 20px; display: grid; gap: 22px; }
+.mailWebhookBlock { min-width: 0; padding-top: 18px; border-top: 1px solid var(--module_dock_border); }
+.mailWebhookBlockHeader { min-height: 34px; display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
+.mailWebhookBlockHeader p { margin: 0; color: var(--weather_dialog_muted); font-size: 9px; line-height: 13px; }
+.mailWebhookBlockHeader h5 { margin: 3px 0 0; font-size: 13px; line-height: 18px; }
+.mailIconTextButton { min-height: 30px; padding: 0 9px; border: 1px solid var(--module_dock_border); border-radius: 5px; display: inline-flex; align-items: center; gap: 5px; color: inherit; background: var(--item_bg_color); font: inherit; font-size: 9px; cursor: pointer; }
+.mailIconTextButton:hover { border-color: var(--module_dock_active_border); background: var(--item_hover_color); }
+.mailWebhookCards { margin-top: 14px; display: grid; gap: 12px; }
+.mailWebhookCard { min-width: 0; padding: 14px; border: 1px solid var(--module_dock_border); border-radius: 6px; background: var(--item_bg_color); }
+.mailWebhookCardHeader { min-height: 36px; display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: end; gap: 10px; }
+.mailWebhookNameField { min-width: 0; display: grid; gap: 6px; }
+.mailWebhookNameField > span,
+.mailWebhookIdRow > span { color: var(--weather_dialog_muted); font-size: 8px; line-height: 12px; }
+.mailWebhookNameField input { width: 100%; height: 36px; padding: 0 9px; border: 1px solid var(--weather_dialog_line_strong); border-radius: 5px; outline: 0; color: inherit; background: var(--weather_dialog_control_bg); font: inherit; font-size: 11px; }
+.mailWebhookNameField input:focus { border-color: var(--weather_dialog_focus); }
+.mailIconButton { width: 34px; height: 36px; padding: 0; border: 1px solid var(--weather_dialog_line_strong); border-radius: 5px; display: inline-grid; place-items: center; color: inherit; background: var(--weather_dialog_control_bg); cursor: pointer; }
+.mailIconButton:hover { background: var(--weather_dialog_control_hover); }
+.mailIconButton:disabled { opacity: 0.35; pointer-events: none; }
+.mailIconButton.is-danger { color: #c85858; }
+.mailWebhookIdRow { min-height: 25px; margin: 9px 0 12px; display: flex; align-items: center; gap: 8px; }
+.mailWebhookIdRow code,
+.mailWebhookIdValue { min-width: 0; padding: 3px 6px; border: 1px solid var(--module_dock_border); border-radius: 4px; color: var(--weather_dialog_muted); background: var(--weather_dialog_control_bg); font: 9px ui-monospace, SFMono-Regular, Consolas, monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mailWebhookControlGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.mailWebhookControlGrid select { width: 100%; height: 42px; padding: 0 9px; border: 1px solid var(--weather_dialog_line_strong); border-radius: 6px; outline: 0; color: inherit; background: var(--weather_dialog_control_bg); font: inherit; font-size: 11px; }
+.mailWebhookControlGrid select:focus { border-color: var(--weather_dialog_focus); }
+.mailWebhookUrl { display: grid; grid-template-columns: minmax(0, 1fr) 34px; }
+.mailWebhookUrl input { min-width: 0; border-radius: 6px 0 0 6px; font: 9px ui-monospace, SFMono-Regular, Consolas, monospace; }
+.mailWebhookUrl .mailIconButton { height: 42px; border-left: 0; border-radius: 0 6px 6px 0; }
+.mailWebhookTokenInput { display: grid; grid-template-columns: minmax(0, 1fr) repeat(3, 34px); }
+.mailWebhookTokenInput input { min-width: 0; border-radius: 6px 0 0 6px; }
+.mailWebhookTokenInput .mailIconButton { height: 42px; border-left: 0; border-radius: 0; }
+.mailWebhookTokenInput .mailIconButton:last-child { border-radius: 0 6px 6px 0; }
+.mailWebhookControlGrid .mailField textarea { min-height: 122px; }
+.mailWebhookCard .mailCredentialState { margin-top: 5px; }
+.mailWebhookCard .mailCredentialState label { white-space: nowrap; }
 .mailWebhookToggle { min-height: 32px; padding: 0 9px; border: 1px solid var(--module_dock_border); border-radius: 6px; display: inline-flex; align-items: center; gap: 7px; font-size: 9px; cursor: pointer; }
 .mailWebhookToggle input { width: 15px; height: 15px; margin: 0; accent-color: var(--weather_dialog_active_bg); }
-.mailWebhookGrid { margin-top: 20px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
-.mailWebhookEndpoint { display: grid; grid-template-columns: minmax(0, 1fr) 42px; }
-.mailWebhookEndpoint input { border-radius: 6px 0 0 6px; }
-.mailWebhookEndpoint button,
-.mailWebhookTokenInput button { width: 42px; height: 42px; padding: 0; border: 1px solid var(--weather_dialog_line_strong); border-left: 0; display: grid; place-items: center; color: inherit; background: var(--weather_dialog_control_bg); cursor: pointer; }
-.mailWebhookEndpoint button { border-radius: 0 6px 6px 0; }
-.mailWebhookEndpoint button:hover,
-.mailWebhookTokenInput button:hover { background: var(--weather_dialog_control_hover); }
-.mailWebhookTokenInput { display: grid; grid-template-columns: minmax(0, 1fr) repeat(3, 42px); }
-.mailWebhookTokenInput input { border-radius: 6px 0 0 6px; }
-.mailWebhookTokenInput button:disabled { opacity: 0.35; pointer-events: none; }
-.mailWebhookTokenInput button:last-child { border-radius: 0 6px 6px 0; }
 .mailTemplateVariables { margin-top: 14px; display: flex; align-items: center; flex-wrap: wrap; gap: 7px; }
 .mailTemplateVariables > span { margin-right: 2px; color: var(--weather_dialog_muted); font-size: 8px; }
 .mailTemplateVariables code { padding: 4px 6px; border: 1px solid var(--module_dock_border); border-radius: 4px; background: var(--item_bg_color); font-size: 8px; }
@@ -699,7 +786,7 @@ watch(() => props.config, (value) => {
 @media (max-width: 680px) {
   .mailProtocolGrid,
   .mailFields.is-identity,
-  .mailWebhookGrid { grid-template-columns: 1fr; }
+  .mailWebhookControlGrid { grid-template-columns: 1fr; }
   .mailProtocol:first-child { border-right: 0; }
 }
 
@@ -707,6 +794,10 @@ watch(() => props.config, (value) => {
   .mailIdentitySettings { padding-inline: 0; }
   .mailProtocol { padding-inline: 0; }
   .mailWebhookSettings { padding-inline: 0; }
+  .mailWebhookCard { padding-inline: 10px; }
+  .mailWebhookCardHeader { grid-template-columns: minmax(0, 1fr) auto; }
+  .mailWebhookCardHeader .mailIconButton { grid-column: 2; grid-row: 1; }
+  .mailWebhookCardHeader .mailWebhookToggle { grid-column: 1 / -1; grid-row: 2; justify-self: start; }
   .mailProtocol > header { align-items: flex-start; }
   .mailFields { grid-template-columns: 1fr; }
   .mailField.is-wide { grid-column: auto; }

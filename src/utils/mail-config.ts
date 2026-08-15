@@ -7,6 +7,9 @@ const STORED_SCHEMA_VERSION = 2
 const MAIL_WEBHOOK_AAD = encoder.encode('aneko:mail-webhook:v1')
 const MAIL_WEBHOOK_KEY = 'mail:webhook:v1'
 const WEBHOOK_STORED_SCHEMA_VERSION = 1
+const MAIL_WEBHOOK_V2_AAD = encoder.encode('aneko:mail-webhook:v2')
+const MAIL_WEBHOOK_V2_KEY = 'mail:webhook:v2'
+const WEBHOOK_V2_STORED_SCHEMA_VERSION = 2
 const AES_GCM_IV_BYTES = 12
 const MAX_PASSWORD_LENGTH = 4096
 const MIN_WEBHOOK_TOKEN_LENGTH = 32
@@ -20,6 +23,9 @@ const EMAIL_PATTERN = /^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9](?:[a-z0-9-]{0,61}
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const CONTROL_CHARACTER_PATTERN = /[\u0000-\u001f\u007f]/u
 const UNSAFE_HOST_SUFFIXES = ['.internal', '.lan', '.local', '.localhost', '.home', '.invalid', '.test']
+const WEBHOOK_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/
+const MAX_WEBHOOK_ITEMS = 50
+const MAX_WEBHOOK_NAME_LENGTH = 100
 
 export const MAIL_REQUEST_MAX_BODY_BYTES = 2 * 1024 * 1024
 
@@ -47,6 +53,33 @@ export interface MailWebhookConfiguration {
   subject: string
   text: string
 }
+
+export interface MailWebhookTemplate {
+  id: string
+  name: string
+  subject: string
+  text: string
+}
+
+export interface MailWebhookEndpoint {
+  id: string
+  name: string
+  enabled: boolean
+  token: string
+  to: string[]
+  cc: string[]
+  templateId: string
+}
+
+export interface MailWebhookStore {
+  revision: string | null
+  updatedAt: string | null
+  templates: MailWebhookTemplate[]
+  endpoints: MailWebhookEndpoint[]
+}
+
+export type MailAdminWebhookTemplate = MailWebhookTemplate
+export type MailAdminWebhookEndpoint = Omit<MailWebhookEndpoint, 'token'> & { tokenConfigured: boolean }
 
 export interface MailConfiguration {
   configured: boolean
@@ -83,6 +116,15 @@ interface EncryptedEnvelope {
 
 interface EncryptedWebhookEnvelope {
   schemaVersion: typeof WEBHOOK_STORED_SCHEMA_VERSION
+  revision: string
+  updatedAt: string
+  algorithm: 'AES-256-GCM'
+  iv: string
+  ciphertext: string
+}
+
+interface EncryptedWebhookV2Envelope {
+  schemaVersion: typeof WEBHOOK_V2_STORED_SCHEMA_VERSION
   revision: string
   updatedAt: string
   algorithm: 'AES-256-GCM'
@@ -136,6 +178,10 @@ function emptyWebhookConfiguration(): MailWebhookConfiguration {
     subject: 'Webhook notification',
     text: '{{json}}',
   }
+}
+
+function emptyWebhookStore(): MailWebhookStore {
+  return { revision: null, updatedAt: null, templates: [], endpoints: [] }
 }
 
 function validationError(message: string): never {
@@ -291,6 +337,107 @@ function normalizeWebhook(value: unknown, existing: MailWebhookConfiguration) {
     validationError('webhook requires a token and at least one recipient when enabled')
   }
   return webhook
+}
+
+function webhookId(value: unknown, field: string) {
+  if (typeof value !== 'string' || !WEBHOOK_ID_PATTERN.test(value)) {
+    validationError(`${field} must be 1-64 letters, digits, dots, underscores, or hyphens`)
+  }
+  return value
+}
+
+function webhookName(value: unknown, field: string) {
+  if (typeof value !== 'string') validationError(`${field} must be a string`)
+  const normalized = value.trim()
+  if (!normalized || normalized.length > MAX_WEBHOOK_NAME_LENGTH || CONTROL_CHARACTER_PATTERN.test(normalized)) {
+    validationError(`${field} is invalid`)
+  }
+  return normalized
+}
+
+function normalizeWebhookTemplate(value: unknown): MailWebhookTemplate {
+  const input = asRecord(value, 'template')
+  assertKnownKeys(input, ['id', 'name', 'subject', 'text'], 'template')
+  const id = webhookId(input.id, 'template.id')
+  return {
+    id,
+    name: webhookName(input.name, 'template.name'),
+    subject: webhookTemplateField(input, 'subject', MAX_WEBHOOK_SUBJECT_LENGTH),
+    text: webhookTemplateField(input, 'text', MAX_WEBHOOK_TEXT_LENGTH),
+  }
+}
+
+function normalizeWebhookEndpoint(
+  value: unknown,
+  existing: MailWebhookEndpoint | undefined,
+  templateIds: Set<string>,
+): MailWebhookEndpoint {
+  const input = asRecord(value, 'endpoint')
+  assertKnownKeys(input, ['id', 'name', 'enabled', 'token', 'to', 'cc', 'templateId'], 'endpoint')
+  const id = webhookId(input.id, 'endpoint.id')
+  if (typeof input.enabled !== 'boolean') validationError('endpoint.enabled must be a boolean')
+  const token = webhookTokenField(input, existing?.token || '')
+  const to = normalizeWebhookRecipients(input.to, 'endpoint.to')
+  const cc = normalizeWebhookRecipients(input.cc, 'endpoint.cc')
+  if (to.length + cc.length > MAX_WEBHOOK_RECIPIENTS) validationError(`endpoint supports at most ${MAX_WEBHOOK_RECIPIENTS} recipients`)
+  if (typeof input.templateId !== 'string' || !templateIds.has(input.templateId)) {
+    validationError('endpoint.templateId must reference an existing template')
+  }
+  if (input.enabled && (!token || !to.length)) validationError('enabled endpoint requires a token and at least one recipient')
+  return { id, name: webhookName(input.name, 'endpoint.name'), enabled: input.enabled, token, to, cc, templateId: input.templateId }
+}
+
+function normalizeWebhookStore(value: unknown, existing: MailWebhookStore): MailWebhookStore {
+  const input = asRecord(value, 'body')
+  assertKnownKeys(input, ['revision', 'templates', 'endpoints'], 'body')
+  if (!Array.isArray(input.templates) || input.templates.length > MAX_WEBHOOK_ITEMS) validationError(`body.templates must contain at most ${MAX_WEBHOOK_ITEMS} items`)
+  if (!Array.isArray(input.endpoints) || input.endpoints.length > MAX_WEBHOOK_ITEMS) validationError(`body.endpoints must contain at most ${MAX_WEBHOOK_ITEMS} items`)
+  const templates = input.templates.map((item) => normalizeWebhookTemplate(item))
+  const templateIds = new Set<string>()
+  for (const template of templates) {
+    if (templateIds.has(template.id)) validationError(`template.${template.id} is duplicated`)
+    templateIds.add(template.id)
+  }
+  const existingEndpoints = new Map(existing.endpoints.map((item) => [item.id, item]))
+  const endpoints = input.endpoints.map((item) => {
+    const record = asRecord(item, 'endpoint')
+    const id = typeof record.id === 'string' ? record.id : ''
+    return normalizeWebhookEndpoint(item, existingEndpoints.get(id), templateIds)
+  })
+  const endpointIds = new Set<string>()
+  for (const endpoint of endpoints) {
+    if (endpointIds.has(endpoint.id)) validationError(`endpoint.${endpoint.id} is duplicated`)
+    endpointIds.add(endpoint.id)
+  }
+  if (!templateIds.has('default')) validationError('the default template is required')
+  if (!endpointIds.has('default')) validationError('the default endpoint is required')
+  return { revision: existing.revision, updatedAt: existing.updatedAt, templates, endpoints }
+}
+
+function legacyWebhookStoreInput(input: JsonRecord, existing: MailWebhookStore) {
+  assertKnownKeys(input, ['revision', 'enabled', 'token', 'to', 'cc', 'subject', 'text'], 'body')
+  const currentTemplate = existing.templates.find((template) => template.id === 'default')
+  const currentEndpoint = existing.endpoints.find((endpoint) => endpoint.id === 'default')
+  const template: JsonRecord = {
+    id: 'default',
+    name: currentTemplate?.name || '默认模板',
+    subject: input.subject,
+    text: input.text,
+  }
+  const endpoint: JsonRecord = {
+    id: 'default',
+    name: currentEndpoint?.name || '默认接口',
+    enabled: input.enabled,
+    to: input.to,
+    cc: input.cc,
+    templateId: 'default',
+  }
+  if (Object.prototype.hasOwnProperty.call(input, 'token')) endpoint.token = input.token
+  return {
+    revision: input.revision,
+    templates: [template, ...existing.templates.filter((item) => item.id !== 'default')],
+    endpoints: [endpoint, ...existing.endpoints.filter((item) => item.id !== 'default')],
+  }
 }
 
 function normalizeConfiguration(value: unknown, existing: MailConfiguration): MailConfiguration {
@@ -546,6 +693,59 @@ async function decryptWebhookConfiguration(
   }
 }
 
+async function encryptWebhookStore(
+  store: MailWebhookStore,
+  revision: string,
+  updatedAt: string,
+  keyValue?: string,
+): Promise<EncryptedWebhookV2Envelope> {
+  const iv = crypto.getRandomValues(new Uint8Array(AES_GCM_IV_BYTES))
+  const key = await importEncryptionKey(keyValue)
+  const plaintext = encoder.encode(JSON.stringify({ templates: store.templates, endpoints: store.endpoints }))
+  const ciphertext = await crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv, additionalData: MAIL_WEBHOOK_V2_AAD, tagLength: 128 },
+    key,
+    plaintext,
+  )
+  return {
+    schemaVersion: WEBHOOK_V2_STORED_SCHEMA_VERSION,
+    revision,
+    updatedAt,
+    algorithm: 'AES-256-GCM',
+    iv: encodeBase64Url(iv),
+    ciphertext: encodeBase64Url(new Uint8Array(ciphertext)),
+  }
+}
+
+function parseWebhookV2Envelope(value: unknown): EncryptedWebhookV2Envelope {
+  const input = asRecord(value, 'stored webhook configuration')
+  assertKnownKeys(input, ['schemaVersion', 'revision', 'updatedAt', 'algorithm', 'iv', 'ciphertext'], 'stored webhook configuration')
+  if (input.schemaVersion !== WEBHOOK_V2_STORED_SCHEMA_VERSION
+    || input.algorithm !== 'AES-256-GCM'
+    || typeof input.revision !== 'string' || !UUID_PATTERN.test(input.revision)
+    || typeof input.updatedAt !== 'string' || Number.isNaN(Date.parse(input.updatedAt))
+    || typeof input.iv !== 'string' || typeof input.ciphertext !== 'string') {
+    throw new MailConfigUnavailableError()
+  }
+  return input as unknown as EncryptedWebhookV2Envelope
+}
+
+async function decryptWebhookStore(envelope: EncryptedWebhookV2Envelope, keyValue?: string): Promise<MailWebhookStore> {
+  const iv = decodeBase64(envelope.iv)
+  const ciphertext = decodeBase64(envelope.ciphertext)
+  if (iv.byteLength !== AES_GCM_IV_BYTES || ciphertext.byteLength < 16) throw new MailConfigUnavailableError()
+  const key = await importEncryptionKey(keyValue)
+  const plaintext = await crypto.subtle.decrypt(
+    { name: 'AES-GCM', iv, additionalData: MAIL_WEBHOOK_V2_AAD, tagLength: 128 },
+    key,
+    ciphertext,
+  )
+  const parsed = JSON.parse(decoder.decode(plaintext)) as JsonRecord
+  const existing = emptyWebhookStore()
+  const store = normalizeWebhookStore({ ...parsed, revision: envelope.revision }, existing)
+  return { ...store, revision: envelope.revision, updatedAt: envelope.updatedAt }
+}
+
 export async function readMailConfiguration(bindings: MailBindings): Promise<MailConfiguration> {
   const raw = await bindings.ANEKO_KV.get(getKvKey(bindings))
   if (!raw) return emptyConfiguration()
@@ -608,6 +808,151 @@ export async function saveMailWebhookConfiguration(bindings: MailBindings, value
   )
   await bindings.ANEKO_KV.put(MAIL_WEBHOOK_KEY, JSON.stringify(envelope))
   return { ...configuration, revision, updatedAt }
+}
+
+function migrateLegacyWebhook(configuration: MailWebhookConfiguration): MailWebhookStore {
+  const template: MailWebhookTemplate = {
+    id: 'default',
+    name: '默认模板',
+    subject: configuration.subject,
+    text: configuration.text,
+  }
+  const endpoint: MailWebhookEndpoint = {
+    id: 'default',
+    name: '默认接口',
+    enabled: configuration.enabled,
+    token: configuration.token,
+    to: [...configuration.to],
+    cc: [...configuration.cc],
+    templateId: template.id,
+  }
+  return {
+    revision: configuration.revision,
+    updatedAt: configuration.updatedAt,
+    templates: [template],
+    endpoints: [endpoint],
+  }
+}
+
+export async function readMailWebhookStore(bindings: MailBindings): Promise<MailWebhookStore> {
+  const raw = await bindings.ANEKO_KV.get(MAIL_WEBHOOK_V2_KEY)
+  if (raw) {
+    try {
+      const envelope = parseWebhookV2Envelope(JSON.parse(raw))
+      return await decryptWebhookStore(envelope, bindings.MAIL_CONFIG_ENCRYPTION_KEY)
+    } catch (error) {
+      if (error instanceof MailConfigUnavailableError) throw error
+      throw new MailConfigUnavailableError()
+    }
+  }
+  return migrateLegacyWebhook(await readMailWebhookConfiguration(bindings))
+}
+
+export async function saveMailWebhookStore(bindings: MailBindings, value: unknown) {
+  const existing = await readMailWebhookStore(bindings)
+  const expectedRevision = parseExpectedRevision(value)
+  if (expectedRevision !== existing.revision) {
+    throw new MailConfigConflictError('Webhook configuration has changed; reload and try again')
+  }
+  const input = asRecord(value, 'body')
+  const storeInput = Object.prototype.hasOwnProperty.call(input, 'templates')
+    || Object.prototype.hasOwnProperty.call(input, 'endpoints')
+    ? input
+    : legacyWebhookStoreInput(input, existing)
+  const store = normalizeWebhookStore(storeInput, existing)
+  const revision = crypto.randomUUID()
+  const updatedAt = new Date().toISOString()
+  const envelope = await encryptWebhookStore(store, revision, updatedAt, bindings.MAIL_CONFIG_ENCRYPTION_KEY)
+  await bindings.ANEKO_KV.put(MAIL_WEBHOOK_V2_KEY, JSON.stringify(envelope))
+  // Keep the legacy default endpoint current so an older Worker can still serve
+  // the original /api/mail/webhook route after a rollback.
+  const defaultEndpoint = store.endpoints.find((endpoint) => endpoint.id === 'default')
+  const defaultTemplate = defaultEndpoint
+    ? store.templates.find((template) => template.id === defaultEndpoint.templateId)
+    : undefined
+  const legacy: MailWebhookConfiguration = defaultEndpoint && defaultTemplate
+    ? {
+      revision: null,
+      updatedAt: null,
+      enabled: defaultEndpoint.enabled,
+      token: defaultEndpoint.token,
+      to: [...defaultEndpoint.to],
+      cc: [...defaultEndpoint.cc],
+      subject: defaultTemplate.subject,
+      text: defaultTemplate.text,
+    }
+    : emptyWebhookConfiguration()
+  const legacyEnvelope = await encryptWebhookConfiguration(legacy, revision, updatedAt, bindings.MAIL_CONFIG_ENCRYPTION_KEY)
+  try {
+    await bindings.ANEKO_KV.put(MAIL_WEBHOOK_KEY, JSON.stringify(legacyEnvelope))
+  } catch {
+    // The v2 record is authoritative for the current Worker. Legacy sync is best effort for rollback support.
+  }
+  return { ...store, revision, updatedAt }
+}
+
+export async function saveMailWebhookTemplates(bindings: MailBindings, value: unknown) {
+  const input = asRecord(value, 'body')
+  assertKnownKeys(input, ['revision', 'templates'], 'body')
+  if (!Array.isArray(input.templates)) validationError('body.templates must be an array')
+  const existing = await readMailWebhookStore(bindings)
+  return saveMailWebhookStore(bindings, {
+    revision: input.revision,
+    templates: input.templates,
+    endpoints: existing.endpoints,
+  })
+}
+
+export async function saveMailWebhookEndpoints(bindings: MailBindings, value: unknown) {
+  const input = asRecord(value, 'body')
+  assertKnownKeys(input, ['revision', 'endpoints'], 'body')
+  if (!Array.isArray(input.endpoints)) validationError('body.endpoints must be an array')
+  const existing = await readMailWebhookStore(bindings)
+  return saveMailWebhookStore(bindings, {
+    revision: input.revision,
+    templates: existing.templates,
+    endpoints: input.endpoints,
+  })
+}
+
+export function adminMailWebhookStore(store: MailWebhookStore) {
+  const defaultEndpoint = store.endpoints.find((endpoint) => endpoint.id === 'default')
+  const defaultTemplate = defaultEndpoint
+    ? store.templates.find((template) => template.id === defaultEndpoint.templateId)
+    : undefined
+  return {
+    revision: store.revision,
+    updatedAt: store.updatedAt,
+    templates: store.templates.map((template) => ({ ...template })),
+    endpoints: store.endpoints.map((endpoint) => ({
+      id: endpoint.id,
+      name: endpoint.name,
+      enabled: endpoint.enabled,
+      tokenConfigured: Boolean(endpoint.token),
+      to: [...endpoint.to],
+      cc: [...endpoint.cc],
+      templateId: endpoint.templateId,
+    })),
+    // Keep the legacy projection for cached clients from the single-webhook release.
+    enabled: Boolean(defaultEndpoint?.enabled),
+    tokenConfigured: Boolean(defaultEndpoint?.token),
+    to: defaultEndpoint ? [...defaultEndpoint.to] : [],
+    cc: defaultEndpoint ? [...defaultEndpoint.cc] : [],
+    subject: defaultTemplate?.subject || '',
+    text: defaultTemplate?.text || '',
+  }
+}
+
+export function publicMailWebhook(store: MailWebhookStore, id: string) {
+  const endpoint = store.endpoints.find((item) => item.id === id)
+  if (!endpoint) return null
+  const template = store.templates.find((item) => item.id === endpoint.templateId)
+  if (!template) return null
+  return {
+    ...endpoint,
+    subject: template.subject,
+    text: template.text,
+  }
 }
 
 export async function resolveMailDraft(

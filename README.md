@@ -108,18 +108,21 @@ Aneko Homepage 是参考zyyo主页风格，基于 Astro 7、Vue 3 和 Cloudflare
 
 #### Webhook 发信
 
-在 `/mail/` 的邮箱设置中启用 Webhook，生成独立 Token，然后配置固定收件人、抄送、主题模板和正文模板。外部请求不能更改发件人或收件人，避免接口成为开放邮件中继。
+在 `/mail/` 的邮箱设置中，先在“模板库”预设多个主题/正文模板，再创建多个 Webhook 接口。页面会为新模板和接口生成稳定的标识；每个接口有独立的 Token、固定收件人/抄送和所使用的模板。外部请求不能更改发件人或收件人，避免接口成为开放邮件中继。
 
 请求地址：
 
 ```text
 POST https://www.aneko.ink/api/mail/webhook
+POST https://www.aneko.ink/api/mail/webhook/<接口标识>
 ```
+
+不带接口标识的旧地址等同于 `default` 接口；新建接口后应使用带标识的地址。
 
 请求头：
 
 ```http
-Authorization: Bearer <邮箱设置中保存的 Token>
+Authorization: Bearer <该接口保存的 Token>
 Content-Type: application/json
 Idempotency-Key: notification-20260813-0001
 ```
@@ -145,16 +148,16 @@ Idempotency-Key: notification-20260813-0001
 示例：
 
 ```bash
-curl -X POST 'https://www.aneko.ink/api/mail/webhook' \
+curl -X POST 'https://www.aneko.ink/api/mail/webhook/endpoint' \
   -H 'Authorization: Bearer YOUR_WEBHOOK_TOKEN' \
   -H 'Content-Type: application/json' \
   -H 'Idempotency-Key: notification-20260813-0001' \
   --data '{"event":"backup.completed","title":"Backup completed"}'
 ```
 
-Webhook 复用邮箱发信的 IP 限流和 KV 幂等记录。Token 只在新建或轮换时显示，保存后仅返回“已配置”状态；如果 Token 泄露，请在邮箱设置中生成新 Token 并保存。
+Webhook 复用邮箱发信的 IP 限流和 KV 幂等记录。每个接口使用独立 Token，Token 只在新建或轮换时显示，保存后仅返回“已配置”状态；如果某个 Token 泄露，只需轮换对应接口的 Token。
 
-Webhook 不需要新增 Cloudflare Worker 变量或 Secret；它使用现有的 `MAIL_CONFIG_ENCRYPTION_KEY` 加密后单独存入 `ANEKO_KV` 的 `mail:webhook:v1`。邮箱连接配置和 Webhook 配置使用不同的 AES-GCM 附加认证数据，密文不能互换。
+Webhook 不需要新增 Cloudflare Worker 变量或 Secret；模板和接口配置使用现有的 `MAIL_CONFIG_ENCRYPTION_KEY` 加密后存入 `ANEKO_KV` 的 `mail:webhook:v2`，并以独立的 AES-GCM 附加认证数据保护。缺少 v2 时，系统会在读取时将旧的 `mail:webhook:v1` 映射为内存中的 `default` 模板/接口；通过管理员页面保存后才会写入 v2，并尽力同步 v1，便于旧 Worker 回退。
 
 ## Cloudflare 存储
 
@@ -194,7 +197,7 @@ Webhook 不需要新增 Cloudflare Worker 变量或 Secret；它使用现有的 
 | 网盘文件 | `drive/<relative-path>` | 无 |
 | 网盘空目录标记 | `drive/<folder>/.keep` | 无 |
 | 邮箱连接凭据 | 无 | `mail:config:v2`（可通过 `MAIL_CONFIG_KV_KEY` 修改） |
-| Webhook Token、固定收件人与模板 | 无 | `mail:webhook:v1` |
+| Webhook 模板、接口、Token 与固定收件人 | 无 | `mail:webhook:v2`（兼容保留 `mail:webhook:v1`） |
 
 对象路径统一使用 `/`，不能包含空路径段、`.`、`..` 或 NUL。网页界面会自动生成符合要求的路径。
 
@@ -258,7 +261,7 @@ R2 本身没有空目录，因此创建文件夹时会写入 `drive/<folder>/.ke
 
 ### 邮箱与 Webhook 配置格式
 
-邮箱连接配置写入 `ANEKO_KV` 的 `mail:config:v2` 键，或 `MAIL_CONFIG_KV_KEY` 指定的其他键；Webhook 配置固定写入独立的 `mail:webhook:v1` 键。两份 KV 数据都使用 `MAIL_CONFIG_ENCRYPTION_KEY` 进行 AES-256-GCM 加密，但使用不同的附加认证数据。邮箱密文包含 IMAP/SMTP 连接凭据；Webhook 密文包含 Token、启用状态、固定收件人和主题/正文模板。两者都不包含已收取或已发送的邮件正文。请通过 `/mail/` 的管理员界面更新配置，不要在 Dashboard 中手工拼接或修改密文。
+邮箱连接配置写入 `ANEKO_KV` 的 `mail:config:v2` 键，或 `MAIL_CONFIG_KV_KEY` 指定的其他键；Webhook 模板和接口配置写入独立的 `mail:webhook:v2` 键。两份 KV 数据都使用 `MAIL_CONFIG_ENCRYPTION_KEY` 进行 AES-256-GCM 加密，但使用不同的附加认证数据。Webhook v2 密文包含模板、接口启用状态、每个接口的 Token、固定收件人/抄送和模板引用；不会保存邮件正文。缺少 v2 键时，系统会读取旧 `mail:webhook:v1` 并映射为默认模板与默认接口。请通过 `/mail/` 的管理员界面更新配置，不要在 Dashboard 中手工拼接或修改密文。
 
 `MAIL_CONFIG_ENCRYPTION_KEY` 必须表示恰好 32 字节：支持 64 位十六进制、解码后为 32 字节的 Base64/Base64URL，或恰好 32 字节的 UTF-8 原文。生产环境优先使用随机 32 字节的 Base64URL 值，并与 `ACCESS_CODE`、`TURNSTILE_SECRET` 分开管理。更换或丢失该 Secret 后，两份已有密文都将无法解密，需要在邮箱页面重新保存连接与 Webhook 配置。
 

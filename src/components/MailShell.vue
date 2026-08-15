@@ -380,12 +380,8 @@ interface MailConfig {
   webhook: {
     revision: string | null
     updatedAt: string | null
-    enabled: boolean
-    tokenConfigured: boolean
-    to: string[]
-    cc: string[]
-    subject: string
-    text: string
+    templates: Array<{ id: string; name: string; subject: string; text: string }>
+    endpoints: Array<{ id: string; name: string; enabled: boolean; tokenConfigured: boolean; to: string[]; cc: string[]; templateId: string }>
   }
 }
 
@@ -500,10 +496,18 @@ function authHeaders(contentType?: string) {
 
 type MailboxConfig = Omit<MailConfig, 'webhook'>
 type WebhookConfig = MailConfig['webhook']
+type WebhookConfigResponse = Partial<WebhookConfig> & {
+  enabled?: boolean
+  tokenConfigured?: boolean
+  to?: string[]
+  cc?: string[]
+  subject?: string
+  text?: string
+}
 
 function normalizeConfig(
   value: Partial<MailboxConfig> | null | undefined,
-  webhookValue?: Partial<WebhookConfig> | null,
+  webhookValue?: WebhookConfigResponse | null,
 ): MailConfig {
   const protocol = (entry: Partial<MailProtocolConfig> | undefined, port: number): MailProtocolConfig => ({
     host: entry?.host || '',
@@ -513,6 +517,25 @@ function normalizeConfig(
   })
   const imap = protocol(value?.imap, 993)
   const smtp = protocol(value?.smtp, 465)
+  const legacySubject = webhookValue?.subject?.trim() || ''
+  const legacyText = webhookValue?.text || ''
+  const legacyTo = Array.isArray(webhookValue?.to) ? webhookValue.to : []
+  const legacyCc = Array.isArray(webhookValue?.cc) ? webhookValue.cc : []
+  const legacyTemplate = {
+    id: 'default',
+    name: '默认模板',
+    subject: legacySubject || 'Webhook notification',
+    text: legacyText.trim() ? legacyText : '{{json}}',
+  }
+  const legacyEndpoint = {
+    id: 'default',
+    name: '默认接口',
+    enabled: Boolean(webhookValue?.enabled),
+    tokenConfigured: Boolean(webhookValue?.tokenConfigured),
+    to: legacyTo,
+    cc: legacyCc,
+    templateId: 'default',
+  }
   return {
     configured: Boolean(value?.configured && imap.passwordConfigured && smtp.passwordConfigured),
     revision: value?.revision ?? null,
@@ -524,12 +547,12 @@ function normalizeConfig(
     webhook: {
       revision: webhookValue?.revision ?? null,
       updatedAt: webhookValue?.updatedAt ?? null,
-      enabled: Boolean(webhookValue?.enabled),
-      tokenConfigured: Boolean(webhookValue?.tokenConfigured),
-      to: Array.isArray(webhookValue?.to) ? webhookValue.to : [],
-      cc: Array.isArray(webhookValue?.cc) ? webhookValue.cc : [],
-      subject: webhookValue?.subject || 'Webhook notification',
-      text: webhookValue?.text || '{{json}}',
+      templates: Array.isArray(webhookValue?.templates) && webhookValue.templates.length
+        ? webhookValue.templates
+        : [legacyTemplate],
+      endpoints: Array.isArray(webhookValue?.endpoints) && webhookValue.endpoints.length
+        ? webhookValue.endpoints
+        : [legacyEndpoint],
     },
   }
 }
@@ -548,7 +571,7 @@ async function loadConfig() {
         cache: 'no-store',
         signal: configController.signal,
       }),
-      apiRequest<WebhookConfig>('/api/admin/mail/webhook', {
+      apiRequest<WebhookConfigResponse>('/api/admin/mail/webhook', {
         headers: authHeaders(),
         cache: 'no-store',
         signal: configController.signal,

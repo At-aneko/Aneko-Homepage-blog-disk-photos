@@ -1,19 +1,19 @@
 import type { APIRoute } from 'astro'
 import {
-  adminMailWebhookConfiguration,
-  readMailWebhookConfiguration,
-  saveMailWebhookConfiguration,
+  adminMailWebhookStore,
+  readMailWebhookStore,
+  saveMailWebhookStore,
 } from '../../../../utils/mail-config'
 import { adminMailRoute, mailSuccess, readMailJson } from '../../../../utils/mail-api'
 
 export const prerender = false
 
 export const GET: APIRoute = (context) => adminMailRoute(context, async (_context, bindings) => {
-  const configuration = await readMailWebhookConfiguration(bindings)
-  return mailSuccess(adminMailWebhookConfiguration(configuration))
+  const store = await readMailWebhookStore(bindings)
+  return mailSuccess(adminMailWebhookStore(store))
 })
 
 export const PUT: APIRoute = (context) => adminMailRoute(context, async ({ request }, bindings) => {
-  const configuration = await saveMailWebhookConfiguration(bindings, await readMailJson(request))
-  return mailSuccess(adminMailWebhookConfiguration(configuration))
+  const store = await saveMailWebhookStore(bindings, await readMailJson(request))
+  return mailSuccess(adminMailWebhookStore(store))
 })
