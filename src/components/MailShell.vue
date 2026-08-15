@@ -8,7 +8,7 @@
 
       <div class="mailCommands">
         <button
-          v-if="isAuthenticated && config?.configured && !showSettings"
+          v-if="!authChecking && !showSettings && (!isAuthenticated || config?.configured)"
           class="is-primary"
           type="button"
           title="写邮件"
@@ -18,9 +18,9 @@
           <span>写邮件</span>
         </button>
         <button
-          v-if="isAuthenticated && config?.configured && !showSettings"
+          v-if="!authChecking && !showSettings && (!isAuthenticated || config?.configured)"
           type="button"
-          :disabled="foldersStatus === 'loading' || messagesStatus === 'loading'"
+          :disabled="isAuthenticated && (foldersStatus === 'loading' || messagesStatus === 'loading')"
           title="刷新邮箱"
           @click="refreshMailbox"
         >
@@ -28,7 +28,7 @@
           <span>刷新</span>
         </button>
         <button
-          v-if="isAuthenticated && config?.configured"
+          v-if="!authChecking && (!isAuthenticated || config?.configured)"
           type="button"
           :class="{ 'is-active': showSettings }"
           :title="showSettings ? '返回邮箱' : '邮箱设置'"
@@ -63,22 +63,11 @@
       <span v-for="index in 6" :key="index"></span>
     </div>
 
-    <div v-else-if="!isAuthenticated" class="mailGate">
-      <div class="mailGateIcon"><LockKeyhole :size="28" :stroke-width="1.5" aria-hidden="true" /></div>
-      <p>ADMIN ONLY</p>
-      <h3>管理员邮箱</h3>
-      <span>登录后访问邮箱</span>
-      <button type="button" @click="openLogin">
-        <LogIn :size="15" :stroke-width="1.8" aria-hidden="true" />
-        <span>管理员登录</span>
-      </button>
-    </div>
-
-    <div v-else-if="configStatus === 'loading'" class="mailLoading" aria-label="正在加载邮箱配置">
+    <div v-else-if="isAuthenticated && configStatus === 'loading'" class="mailLoading" aria-label="正在加载邮箱配置">
       <span v-for="index in 6" :key="index"></span>
     </div>
 
-    <div v-else-if="configStatus === 'error'" class="mailState" role="alert">
+    <div v-else-if="isAuthenticated && configStatus === 'error'" class="mailState" role="alert">
       <CircleAlert :size="30" :stroke-width="1.5" aria-hidden="true" />
       <h3>配置读取失败</h3>
       <p>{{ pageError }}</p>
@@ -86,7 +75,7 @@
     </div>
 
     <MailSettingsPanel
-      v-else-if="showSettings || !config?.configured"
+      v-else-if="isAuthenticated && (showSettings || !config?.configured)"
       :config="config"
       :access-code="accessCode"
       @saved="handleConfigSaved"
@@ -96,7 +85,7 @@
       @unauthorized="logout(false)"
     />
 
-    <div v-else class="mailWorkspace">
+    <div v-else class="mailWorkspace" :class="{ 'is-locked': !isAuthenticated }">
       <aside
         class="mailFolders"
         :class="{ 'is-mobile-active': mobileView === 'folders' }"
@@ -105,14 +94,22 @@
         <header class="mailPanelHeader">
           <div>
             <p>MAILBOXES</p>
-            <h3>{{ config.address }}</h3>
+            <h3>{{ isAuthenticated ? (config?.address || '邮箱') : '管理员邮箱' }}</h3>
           </div>
           <button type="button" title="写邮件" aria-label="写邮件" @click="openComposer">
             <SquarePen :size="16" :stroke-width="1.8" aria-hidden="true" />
           </button>
         </header>
 
-        <div v-if="foldersStatus === 'loading'" class="mailPanelLoading">
+        <div v-if="!isAuthenticated" class="mailPanelState is-locked">
+          <LockKeyhole :size="25" :stroke-width="1.5" aria-hidden="true" />
+          <span>邮箱内容已锁定</span>
+          <button type="button" @click="openLogin">
+            <LogIn :size="14" :stroke-width="1.8" aria-hidden="true" />
+            <span>管理员登录</span>
+          </button>
+        </div>
+        <div v-else-if="foldersStatus === 'loading'" class="mailPanelLoading">
           <span v-for="index in 6" :key="index"></span>
         </div>
         <div v-else-if="foldersStatus === 'error'" class="mailPanelState" role="alert">
@@ -151,14 +148,18 @@
           </button>
           <div>
             <p>MESSAGES</p>
-            <h3>{{ activeFolderLabel }}</h3>
+            <h3>{{ isAuthenticated ? activeFolderLabel : '邮件' }}</h3>
           </div>
-          <button type="button" title="刷新邮件" aria-label="刷新邮件" :disabled="messagesStatus === 'loading'" @click="refreshMessages">
+          <button type="button" title="刷新邮件" aria-label="刷新邮件" :disabled="isAuthenticated && messagesStatus === 'loading'" @click="refreshMessages">
             <RefreshCw :size="15" :stroke-width="1.8" aria-hidden="true" />
           </button>
         </header>
 
-        <div v-if="messagesStatus === 'loading'" class="mailMessageLoading">
+        <div v-if="!isAuthenticated" class="mailPanelState is-locked">
+          <LockKeyhole :size="25" :stroke-width="1.5" aria-hidden="true" />
+          <span>邮件列表已锁定</span>
+        </div>
+        <div v-else-if="messagesStatus === 'loading'" class="mailMessageLoading">
           <span v-for="index in 8" :key="index"></span>
         </div>
         <div v-else-if="messagesStatus === 'error'" class="mailPanelState" role="alert">
@@ -206,7 +207,11 @@
         :class="{ 'is-mobile-active': mobileView === 'detail' }"
         aria-label="邮件正文"
       >
-        <div v-if="detailStatus === 'loading'" class="mailReaderLoading">
+        <div v-if="!isAuthenticated" class="mailReaderEmpty is-locked">
+          <LockKeyhole :size="30" :stroke-width="1.4" aria-hidden="true" />
+          <span>邮件正文已锁定</span>
+        </div>
+        <div v-else-if="detailStatus === 'loading'" class="mailReaderLoading">
           <span></span><span></span><span></span>
         </div>
         <div v-else-if="detailStatus === 'error'" class="mailPanelState" role="alert">
@@ -759,15 +764,18 @@ function nextPage() {
 }
 
 async function refreshMessages() {
+  if (!requireAdminAccess()) return
   await loadMessages(cursorHistory.value.at(-1) || null)
 }
 
 async function refreshMailbox() {
+  if (!requireAdminAccess()) return
   await loadFolders()
   if (foldersStatus.value === 'ready') showNotice('邮箱已刷新')
 }
 
 function toggleSettings() {
+  if (!requireAdminAccess()) return
   if (showSettings.value) {
     closeSettings()
     return
@@ -807,6 +815,12 @@ function openLogin() {
   showLogin.value = true
 }
 
+function requireAdminAccess() {
+  if (isAuthenticated.value) return true
+  openLogin()
+  return false
+}
+
 function logout(showConfirmation = true) {
   pageEpoch.value += 1
   abortRequests()
@@ -824,6 +838,7 @@ function logout(showConfirmation = true) {
 }
 
 function openComposer() {
+  if (!requireAdminAccess()) return
   resetComposer()
   showComposer.value = true
 }
@@ -1098,7 +1113,6 @@ onBeforeUnmount(() => {
 .mailCommands { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 7px; }
 
 .mailCommands button,
-.mailGate button,
 .mailState button,
 .mailPanelState button,
 .mailPagination button,
@@ -1120,13 +1134,11 @@ onBeforeUnmount(() => {
 }
 
 .mailCommands button:hover,
-.mailGate button:hover,
 .mailState button:hover,
 .mailPanelState button:hover,
 .mailPagination button:hover,
 .mailComposer footer button:hover { border-color: var(--module_dock_active_border); background: var(--item_hover_color); }
 .mailCommands button:active,
-.mailGate button:active,
 .mailState button:active,
 .mailPanelState button:active,
 .mailPagination button:active,
@@ -1153,7 +1165,6 @@ onBeforeUnmount(() => {
 .mailNotice.is-error,
 .mailFormError { color: #c85858; }
 
-.mailGate,
 .mailState {
   min-height: min(560px, calc(100dvh - 250px));
   border-bottom: 1px solid var(--module_dock_border);
@@ -1163,13 +1174,8 @@ onBeforeUnmount(() => {
   justify-content: center;
   text-align: center;
 }
-.mailGateIcon { width: 58px; height: 58px; border: 1px solid var(--module_dock_border); border-radius: 8px; display: grid; place-items: center; background: var(--item_bg_color); }
-.mailGate > p { margin: 18px 0 0; font-size: 8px; font-weight: 600; opacity: 0.4; }
-.mailGate h3,
 .mailState h3 { margin: 5px 0 0; font-size: 19px; line-height: 27px; }
-.mailGate > span,
 .mailState p { margin: 6px 0 0; font-size: 10px; opacity: 0.5; }
-.mailGate button,
 .mailState button { margin-top: 19px; }
 
 .mailLoading { min-height: min(560px, calc(100dvh - 250px)); border-bottom: 1px solid var(--module_dock_border); display: grid; grid-template-columns: 180px minmax(250px, 0.8fr) minmax(0, 1.4fr); }
@@ -1253,6 +1259,8 @@ onBeforeUnmount(() => {
 .mailReaderEmpty { min-height: 0; flex: 1; padding: 24px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; text-align: center; }
 .mailPanelState > span,
 .mailReaderEmpty span { max-width: 240px; font-size: 9px; line-height: 15px; opacity: 0.5; }
+.mailPanelState.is-locked > svg,
+.mailReaderEmpty.is-locked > svg { opacity: 0.42; }
 .mailPanelState button { margin-top: 3px; }
 .mailPanelState.is-small { min-height: 180px; }
 
@@ -1398,7 +1406,6 @@ onBeforeUnmount(() => {
   .mailReaderLoading span,
   .is-spinning { animation: none; }
   .mailCommands button,
-  .mailGate button,
   .mailState button,
   .mailPanelState button,
   .mailPagination button,
