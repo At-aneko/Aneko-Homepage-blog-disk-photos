@@ -104,10 +104,6 @@
         <div v-if="!isAuthenticated" class="mailPanelState is-locked">
           <LockKeyhole :size="25" :stroke-width="1.5" aria-hidden="true" />
           <span>邮箱内容已锁定</span>
-          <button type="button" @click="openLogin">
-            <LogIn :size="14" :stroke-width="1.8" aria-hidden="true" />
-            <span>管理员登录</span>
-          </button>
         </div>
         <div v-else-if="foldersStatus === 'loading'" class="mailPanelLoading">
           <span v-for="index in 6" :key="index"></span>
