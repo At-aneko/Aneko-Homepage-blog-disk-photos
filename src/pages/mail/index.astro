@@ -1,8 +1,15 @@
 ---
 import MailShell from '../../components/MailShell.vue'
 import WorkspaceLayout from '../../layouts/WorkspaceLayout.astro'
+import { getBindings } from '../../utils/cloudflare'
+import { readMailConfiguration } from '../../utils/mail-config'
 
 export const prerender = false
+
+const publicAddress = await Promise.resolve()
+  .then(() => readMailConfiguration(getBindings()))
+  .then((configuration) => configuration.address)
+  .catch(() => '')
 ---
 
 <WorkspaceLayout
@@ -11,5 +18,5 @@ export const prerender = false
   product="mail"
   keywords="Aneko,邮箱,Webmail,IMAP,SMTP"
 >
-  <MailShell client:load />
+  <MailShell publicAddress={publicAddress} client:load />
 </WorkspaceLayout>

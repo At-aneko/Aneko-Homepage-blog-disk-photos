@@ -94,7 +94,7 @@
         <header class="mailPanelHeader">
           <div>
             <p>MAILBOXES</p>
-            <h3>{{ isAuthenticated ? (config?.address || '邮箱') : '管理员邮箱' }}</h3>
+            <h3>{{ isAuthenticated ? (config?.address || props.publicAddress || '邮箱') : (props.publicAddress || '管理员邮箱') }}</h3>
           </div>
           <button type="button" title="写邮件" aria-label="写邮件" @click="openComposer">
             <SquarePen :size="16" :stroke-width="1.8" aria-hidden="true" />
@@ -362,6 +362,8 @@ import {
 import AdminLoginDialog from './AdminLoginDialog.vue'
 import MailSettingsPanel from './MailSettingsPanel.vue'
 import { ApiRequestError, apiRequest, clearAdminAccess, restoreAdminAccess } from '../utils/admin-client'
+
+const props = defineProps<{ publicAddress?: string }>()
 
 interface MailProtocolConfig {
   host: string
