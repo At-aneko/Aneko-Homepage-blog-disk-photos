@@ -22,9 +22,9 @@ Aneko Homepage 是参考zyyo主页风格，基于 Astro 7、Vue 3 和 Cloudflare
 - 博客管理：新建、编辑、发布、删除、导入 Markdown、上传头图和附件。
 - 相册：瀑布流、灯箱、原图查看与下载，以及照片上传、编辑、排序和删除。
 - 网盘：目录浏览、文件预览与下载，以及文件上传、文件夹创建和递归删除。
-- 邮箱：通过 IMAP 读取已有邮箱，通过 SMTP 发送邮件，不创建新的邮箱账户。
+- 邮箱：通过 IMAP 读取已有邮箱，通过 SMTP 发送邮件，并可通过受保护的 Webhook 套用模板发信。
 - 统一登录：博客、相册、网盘和邮箱共用一个管理员访问码。
-- Cloudflare 存储：R2 保存文件，KV 保存博客元数据、相册清单和加密的邮箱连接凭据。
+- Cloudflare 存储：R2 保存文件，KV 保存博客元数据、相册清单和加密的邮箱/Webhook 配置。
 
 ## 技术栈
 
@@ -97,14 +97,64 @@ Aneko Homepage 是参考zyyo主页风格，基于 Astro 7、Vue 3 和 Cloudflare
 - 收件仅支持使用 TLS 的 IMAP 连接，端口固定为 `993`。
 - 发件仅支持使用 TLS 的 SMTP 连接，端口固定为 `465`。
 - 邮件列表和正文从邮箱服务商按需读取，发送操作直接交给配置的 SMTP 服务。
-- 邮件正文不会保存到 KV、R2 或其他本站存储；KV 只保存经过 AES-256-GCM 加密的 IMAP/SMTP 连接凭据。
-- 不创建或分配邮箱账户，不提供 POP3，也不提供 Webhook 收信或通知功能。
+- 邮件正文不会保存到 KV、R2 或其他本站存储；KV 只保存经过 AES-256-GCM 加密的 IMAP/SMTP 连接凭据、Webhook Token 和模板。
+- 不创建或分配邮箱账户，不提供 POP3，也不使用 Webhook 接收邮件；Webhook 仅用于触发 SMTP 发信。
 - 邮箱设置中的密码默认不回显；服务器和用户名不变时，留空会保留原密码；修改服务器或用户名时必须重新输入对应密码。同时清除 IMAP 与 SMTP 密码会停用已保存的邮箱连接。
 - 发信使用请求幂等键和简单限流来降低误重复；Cloudflare KV 是最终一致性存储，因此这不是跨边缘并发下的严格一次投递保证。发送结果不确定时，应先检查邮箱服务商的已发送文件夹再重试。
 
 邮箱页面是管理员专用 Webmail，不是临时邮箱服务。部署前必须确认邮箱服务商允许从 Cloudflare Workers 建立 IMAP/SMTP 连接。`MAIL_ALLOWED_HOSTS` 是可选的额外限制：留空时，管理员可以在网页中填写任意通过主机名语法与 Cloudflare Socket 出站限制的服务器；填写后只允许连接英文逗号分隔的准确主机名，不支持通配符、协议或端口。
 
 邮箱实现使用 `cf-imap`、`worker-mailer` 和 `DOMPurify`。交互与 Worker 邮件能力受到 MIT 许可项目 [`dreamhunter2333/cloudflare_temp_email`](https://github.com/dreamhunter2333/cloudflare_temp_email) 的启发，但本项目只连接管理员已有邮箱，不包含临时邮箱地址创建或邮件托管能力。
+
+#### Webhook 发信
+
+在 `/mail/` 的邮箱设置中启用 Webhook，生成独立 Token，然后配置固定收件人、抄送、主题模板和正文模板。外部请求不能更改发件人或收件人，避免接口成为开放邮件中继。
+
+请求地址：
+
+```text
+POST https://www.aneko.ink/api/mail/webhook
+```
+
+请求头：
+
+```http
+Authorization: Bearer <邮箱设置中保存的 Token>
+Content-Type: application/json
+Idempotency-Key: notification-20260813-0001
+```
+
+请求体可以是任意 JSON 对象，例如：
+
+```json
+{
+  "event": "backup.completed",
+  "timestamp": "2026-08-13T12:00:00.000Z",
+  "title": "备份完成",
+  "message": "2026-08-13 的站点备份已完成",
+  "user": {
+    "name": "Aneko"
+  }
+}
+```
+
+模板使用 `{{field}}` 读取字段，支持 `{{user.name}}` 这类嵌套路径。`{{json}}` 会插入完整的单行 JSON。时间应由调用方在请求体中传入，例如使用 `{{timestamp}}`；这样用同一请求体重试时模板结果保持稳定。找不到的字段会替换为空字符串。模板渲染后的主题和正文仍分别受 998 字符和 200,000 字符上限限制，超限请求会被拒绝。
+
+`Idempotency-Key` 可选，但生产调用应为每个业务事件传入稳定且唯一的值，长度为 8–120 个字符：首字符必须是英文字母或数字，其余字符可使用英文字母、数字、点、下划线、冒号和连字符。使用同一幂等键重试同一内容时，服务端会返回已发送结果；同一键对应不同内容时返回 `409`。未传入时会为该次请求生成随机键，因此外部系统重试可能重复发信。
+
+示例：
+
+```bash
+curl -X POST 'https://www.aneko.ink/api/mail/webhook' \
+  -H 'Authorization: Bearer YOUR_WEBHOOK_TOKEN' \
+  -H 'Content-Type: application/json' \
+  -H 'Idempotency-Key: notification-20260813-0001' \
+  --data '{"event":"backup.completed","title":"Backup completed"}'
+```
+
+Webhook 复用邮箱发信的 IP 限流和 KV 幂等记录。Token 只在新建或轮换时显示，保存后仅返回“已配置”状态；如果 Token 泄露，请在邮箱设置中生成新 Token 并保存。
+
+Webhook 不需要新增 Cloudflare Worker 变量或 Secret；它使用现有的 `MAIL_CONFIG_ENCRYPTION_KEY` 加密后单独存入 `ANEKO_KV` 的 `mail:webhook:v1`。邮箱连接配置和 Webhook 配置使用不同的 AES-GCM 附加认证数据，密文不能互换。
 
 ## Cloudflare 存储
 
@@ -114,11 +164,11 @@ Aneko Homepage 是参考zyyo主页风格，基于 Astro 7、Vue 3 和 Cloudflare
 | --- | --- | --- |
 | `ASSETS` | Workers Assets binding | Astro 构建后的静态资源 |
 | `ANEKO_R2` | R2 binding | 博客正文/附件、相册原图和网盘文件 |
-| `ANEKO_KV` | KV binding | 博客元数据/索引、相册清单和加密的邮箱连接凭据 |
+| `ANEKO_KV` | KV binding | 博客元数据/索引、相册清单、加密的邮箱/Webhook 配置与发信状态 |
 | `ACCESS_CODE` | Worker secret | 网站管理员访问码 |
 | `TURNSTILE_SECRET` | Worker secret | Turnstile 服务端验证密钥，只能配置为加密 Secret |
 | `TURNSTILE_HOSTNAMES` | Worker variable | Turnstile 允许的站点主机名，生产环境为 `www.aneko.ink` |
-| `MAIL_CONFIG_ENCRYPTION_KEY` | Worker secret | 邮箱连接凭据的 AES-256-GCM 加密密钥，只能配置为加密 Secret |
+| `MAIL_CONFIG_ENCRYPTION_KEY` | Worker secret | 邮箱连接凭据与 Webhook 配置的 AES-256-GCM 加密密钥，只能配置为加密 Secret |
 | `MAIL_CONFIG_KV_KEY` | Worker variable | 加密邮箱配置的 KV 键，默认 `mail:config:v2` |
 | `MAIL_ALLOWED_HOSTS` | Worker variable | 可选的 IMAP/SMTP 主机名白名单；留空时只应用主机名校验和 Cloudflare 出站限制 |
 | `BLOG_INDEX_KEY` | Worker variable | 博客索引键，默认 `blog:index` |
@@ -144,6 +194,7 @@ Aneko Homepage 是参考zyyo主页风格，基于 Astro 7、Vue 3 和 Cloudflare
 | 网盘文件 | `drive/<relative-path>` | 无 |
 | 网盘空目录标记 | `drive/<folder>/.keep` | 无 |
 | 邮箱连接凭据 | 无 | `mail:config:v2`（可通过 `MAIL_CONFIG_KV_KEY` 修改） |
+| Webhook Token、固定收件人与模板 | 无 | `mail:webhook:v1` |
 
 对象路径统一使用 `/`，不能包含空路径段、`.`、`..` 或 NUL。网页界面会自动生成符合要求的路径。
 
@@ -205,11 +256,11 @@ R2 中的 `blog/posts/<slug>.md` 只保存 Markdown 正文，不包含 YAML fron
 
 R2 本身没有空目录，因此创建文件夹时会写入 `drive/<folder>/.keep` 占位对象，列表中不会显示该对象。不要把真实文件命名为 `.keep`。
 
-### 邮箱配置格式
+### 邮箱与 Webhook 配置格式
 
-邮箱配置写入 `ANEKO_KV` 的 `mail:config:v2` 键，或 `MAIL_CONFIG_KV_KEY` 指定的其他键。KV 中保存的是使用 `MAIL_CONFIG_ENCRYPTION_KEY` 进行 AES-256-GCM 加密后的版本化数据，不是可直接编辑的 IMAP/SMTP JSON，也不包含邮件正文。请通过 `/mail/` 的管理员界面更新配置，不要在 Dashboard 中手工拼接或修改密文。
+邮箱连接配置写入 `ANEKO_KV` 的 `mail:config:v2` 键，或 `MAIL_CONFIG_KV_KEY` 指定的其他键；Webhook 配置固定写入独立的 `mail:webhook:v1` 键。两份 KV 数据都使用 `MAIL_CONFIG_ENCRYPTION_KEY` 进行 AES-256-GCM 加密，但使用不同的附加认证数据。邮箱密文包含 IMAP/SMTP 连接凭据；Webhook 密文包含 Token、启用状态、固定收件人和主题/正文模板。两者都不包含已收取或已发送的邮件正文。请通过 `/mail/` 的管理员界面更新配置，不要在 Dashboard 中手工拼接或修改密文。
 
-`MAIL_CONFIG_ENCRYPTION_KEY` 必须表示恰好 32 字节：支持 64 位十六进制、解码后为 32 字节的 Base64/Base64URL，或恰好 32 字节的 UTF-8 原文。生产环境优先使用随机 32 字节的 Base64URL 值，并与 `ACCESS_CODE`、`TURNSTILE_SECRET` 分开管理。更换或丢失该 Secret 后，已有密文将无法解密，需要在邮箱页面重新保存连接配置。
+`MAIL_CONFIG_ENCRYPTION_KEY` 必须表示恰好 32 字节：支持 64 位十六进制、解码后为 32 字节的 Base64/Base64URL，或恰好 32 字节的 UTF-8 原文。生产环境优先使用随机 32 字节的 Base64URL 值，并与 `ACCESS_CODE`、`TURNSTILE_SECRET` 分开管理。更换或丢失该 Secret 后，两份已有密文都将无法解密，需要在邮箱页面重新保存连接与 Webhook 配置。
 
 
 ## 部署
@@ -219,7 +270,7 @@ R2 本身没有空目录，因此创建文件夹时会写入 `drive/<folder>/.ke
 1. 打开 **Workers & Pages**，选择当前 Worker，然后进入 **Settings > Bindings**，将 R2 bucket 绑定为 `ANEKO_R2`，将 KV namespace 绑定为 `ANEKO_KV`。
 2. 进入 **Settings > Variables and Secrets**，将管理员访问码添加为加密 Secret `ACCESS_CODE`。
 3. 在同一页面将 Turnstile widget 的 secret key 添加为加密 Secret `TURNSTILE_SECRET`。不要使用公开 site key 代替，也不要把值写入仓库。
-4. 在同一页面为邮箱凭据添加独立的加密 Secret `MAIL_CONFIG_ENCRYPTION_KEY`。优先使用随机 32 字节的 Base64URL 值，不要复用管理员访问码或提交到仓库。
+4. 在同一页面为邮箱连接与 Webhook 配置添加独立的加密 Secret `MAIL_CONFIG_ENCRYPTION_KEY`。优先使用随机 32 字节的 Base64URL 值，不要复用管理员访问码或提交到仓库。
 5. 添加普通文本变量 `TURNSTILE_HOSTNAMES`，生产环境填写 `www.aneko.ink`。多个允许主机名使用英文逗号分隔。
 6. 可选添加普通文本变量 `MAIL_ALLOWED_HOSTS`，将邮箱连接限制为指定的 IMAP 与 SMTP 主机名，例如 `imap.example.com,smtp.example.com`。只填写准确主机名，不包含协议或端口；留空时管理员可以直接在邮箱页面配置通过主机名校验和 Cloudflare Socket 出站限制的服务器。
 7. 保留 `MAIL_CONFIG_KV_KEY=mail:config:v2`，或在尚未保存邮箱配置前按需修改。修改后原键中的配置不会自动迁移。

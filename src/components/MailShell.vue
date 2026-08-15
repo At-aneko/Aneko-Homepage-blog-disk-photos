@@ -90,7 +90,8 @@
       :config="config"
       :access-code="accessCode"
       @saved="handleConfigSaved"
-      @cancel="showSettings = false"
+      @updated="handleConfigUpdated"
+      @cancel="closeSettings"
       @notice="showNotice"
       @unauthorized="logout(false)"
     />
@@ -376,6 +377,16 @@ interface MailConfig {
   displayName: string
   imap: MailProtocolConfig
   smtp: MailProtocolConfig
+  webhook: {
+    revision: string | null
+    updatedAt: string | null
+    enabled: boolean
+    tokenConfigured: boolean
+    to: string[]
+    cc: string[]
+    subject: string
+    text: string
+  }
 }
 
 interface MailFolder {
@@ -487,7 +498,13 @@ function authHeaders(contentType?: string) {
   }
 }
 
-function normalizeConfig(value: Partial<MailConfig> | null | undefined): MailConfig {
+type MailboxConfig = Omit<MailConfig, 'webhook'>
+type WebhookConfig = MailConfig['webhook']
+
+function normalizeConfig(
+  value: Partial<MailboxConfig> | null | undefined,
+  webhookValue?: Partial<WebhookConfig> | null,
+): MailConfig {
   const protocol = (entry: Partial<MailProtocolConfig> | undefined, port: number): MailProtocolConfig => ({
     host: entry?.host || '',
     port,
@@ -504,6 +521,16 @@ function normalizeConfig(value: Partial<MailConfig> | null | undefined): MailCon
     displayName: value?.displayName || '',
     imap,
     smtp,
+    webhook: {
+      revision: webhookValue?.revision ?? null,
+      updatedAt: webhookValue?.updatedAt ?? null,
+      enabled: Boolean(webhookValue?.enabled),
+      tokenConfigured: Boolean(webhookValue?.tokenConfigured),
+      to: Array.isArray(webhookValue?.to) ? webhookValue.to : [],
+      cc: Array.isArray(webhookValue?.cc) ? webhookValue.cc : [],
+      subject: webhookValue?.subject || 'Webhook notification',
+      text: webhookValue?.text || '{{json}}',
+    },
   }
 }
 
@@ -515,13 +542,20 @@ async function loadConfig() {
   configStatus.value = 'loading'
   pageError.value = ''
   try {
-    const result = await apiRequest<MailConfig>('/api/admin/mail/config', {
-      headers: authHeaders(),
-      cache: 'no-store',
-      signal: configController.signal,
-    })
+    const [result, webhook] = await Promise.all([
+      apiRequest<MailboxConfig>('/api/admin/mail/config', {
+        headers: authHeaders(),
+        cache: 'no-store',
+        signal: configController.signal,
+      }),
+      apiRequest<WebhookConfig>('/api/admin/mail/webhook', {
+        headers: authHeaders(),
+        cache: 'no-store',
+        signal: configController.signal,
+      }),
+    ])
     if (epoch !== pageEpoch.value) return
-    config.value = normalizeConfig(result)
+    config.value = normalizeConfig(result, webhook)
     configStatus.value = 'ready'
     showSettings.value = !config.value.configured
     if (config.value.configured) await loadFolders()
@@ -712,7 +746,7 @@ async function refreshMailbox() {
 
 function toggleSettings() {
   if (showSettings.value) {
-    showSettings.value = false
+    closeSettings()
     return
   }
   abortMailboxRequests()
@@ -720,12 +754,22 @@ function toggleSettings() {
   showSettings.value = !showSettings.value
 }
 
+function handleConfigUpdated(nextConfig: MailConfig) {
+  config.value = normalizeConfig(nextConfig, nextConfig.webhook)
+  configStatus.value = 'ready'
+}
+
 function handleConfigSaved(nextConfig: MailConfig) {
-  config.value = normalizeConfig(nextConfig)
+  config.value = normalizeConfig(nextConfig, nextConfig.webhook)
   configStatus.value = 'ready'
   showSettings.value = !config.value.configured
   if (config.value.configured) void loadFolders()
   else resetMailbox()
+}
+
+function closeSettings() {
+  showSettings.value = false
+  if (config.value?.configured) void loadFolders()
 }
 
 function handleAuthenticated(code: string) {

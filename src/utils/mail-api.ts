@@ -35,22 +35,26 @@ export async function adminMailRoute(context: Parameters<APIRoute>[0], handler: 
     }
     return await handler(context, bindings)
   } catch (error) {
-    if (error instanceof MailConfigConflictError || error instanceof MailServiceConflictError) {
-      return mailError(error.message, 409)
-    }
-    if (error instanceof MailConfigValidationError || error instanceof MailServiceInputError) {
-      return mailError(error.message, 400)
-    }
-    if (error instanceof MailServiceNotFoundError) return mailError(error.message, 404)
-    if (error instanceof MailServiceTooLargeError) return mailError(error.message, 413)
-    if (error instanceof MailServiceRateLimitError) {
-      return mailError(error.message, 429, { 'Retry-After': String(error.retryAfter) })
-    }
-    if (error instanceof MailConfigUnavailableError || error instanceof MailServiceUnavailableError) {
-      return mailError('Mail service is unavailable', 503)
-    }
-    return mailError('Mail operation failed', 500)
+    return mailExceptionResponse(error)
   }
+}
+
+export function mailExceptionResponse(error: unknown) {
+  if (error instanceof MailConfigConflictError || error instanceof MailServiceConflictError) {
+    return mailError(error.message, 409)
+  }
+  if (error instanceof MailConfigValidationError || error instanceof MailServiceInputError) {
+    return mailError(error.message, 400)
+  }
+  if (error instanceof MailServiceNotFoundError) return mailError(error.message, 404)
+  if (error instanceof MailServiceTooLargeError) return mailError(error.message, 413)
+  if (error instanceof MailServiceRateLimitError) {
+    return mailError(error.message, 429, { 'Retry-After': String(error.retryAfter) })
+  }
+  if (error instanceof MailConfigUnavailableError || error instanceof MailServiceUnavailableError) {
+    return mailError('Mail service is unavailable', 503)
+  }
+  return mailError('Mail operation failed', 500)
 }
 
 export function mailSuccess<T>(data: T, status = 200) {

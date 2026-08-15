@@ -4,8 +4,17 @@ const decoder = new TextDecoder()
 const MAIL_CONFIG_AAD = encoder.encode('aneko:mail-config:v2')
 const MAIL_CONFIG_KEY = 'mail:config:v2'
 const STORED_SCHEMA_VERSION = 2
+const MAIL_WEBHOOK_AAD = encoder.encode('aneko:mail-webhook:v1')
+const MAIL_WEBHOOK_KEY = 'mail:webhook:v1'
+const WEBHOOK_STORED_SCHEMA_VERSION = 1
 const AES_GCM_IV_BYTES = 12
 const MAX_PASSWORD_LENGTH = 4096
+const MIN_WEBHOOK_TOKEN_LENGTH = 32
+const MAX_WEBHOOK_TOKEN_LENGTH = 256
+const MAX_WEBHOOK_RECIPIENTS = 20
+const MAX_WEBHOOK_SUBJECT_LENGTH = 998
+const MAX_WEBHOOK_TEXT_LENGTH = 200_000
+const WEBHOOK_TOKEN_PATTERN = /^[A-Za-z0-9._~-]+$/
 const HOSTNAME_PATTERN = /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/i
 const EMAIL_PATTERN = /^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/i
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -28,6 +37,17 @@ export interface MailConnectionConfig {
   password: string
 }
 
+export interface MailWebhookConfiguration {
+  revision: string | null
+  updatedAt: string | null
+  enabled: boolean
+  token: string
+  to: string[]
+  cc: string[]
+  subject: string
+  text: string
+}
+
 export interface MailConfiguration {
   configured: boolean
   revision: string | null
@@ -48,8 +68,21 @@ export interface MailAdminConfiguration {
   smtp: Omit<MailConnectionConfig, 'password'> & { passwordConfigured: boolean }
 }
 
+export type MailAdminWebhookConfiguration = Omit<MailWebhookConfiguration, 'token'> & {
+  tokenConfigured: boolean
+}
+
 interface EncryptedEnvelope {
   schemaVersion: typeof STORED_SCHEMA_VERSION
+  revision: string
+  updatedAt: string
+  algorithm: 'AES-256-GCM'
+  iv: string
+  ciphertext: string
+}
+
+interface EncryptedWebhookEnvelope {
+  schemaVersion: typeof WEBHOOK_STORED_SCHEMA_VERSION
   revision: string
   updatedAt: string
   algorithm: 'AES-256-GCM'
@@ -67,8 +100,8 @@ export class MailConfigValidationError extends Error {
 }
 
 export class MailConfigConflictError extends Error {
-  constructor() {
-    super('Mail configuration has changed; reload and try again')
+  constructor(message = 'Mail configuration has changed; reload and try again') {
+    super(message)
     this.name = 'MailConfigConflictError'
   }
 }
@@ -89,6 +122,19 @@ function emptyConfiguration(): MailConfiguration {
     displayName: '',
     imap: { host: '', port: 993, username: '', password: '' },
     smtp: { host: '', port: 465, username: '', password: '' },
+  }
+}
+
+function emptyWebhookConfiguration(): MailWebhookConfiguration {
+  return {
+    revision: null,
+    updatedAt: null,
+    enabled: false,
+    token: '',
+    to: [],
+    cc: [],
+    subject: 'Webhook notification',
+    text: '{{json}}',
   }
 }
 
@@ -178,6 +224,73 @@ function normalizeConnection(
     username,
     password: passwordField(input, existing.password, field, endpointChanged),
   }
+}
+
+function normalizeWebhookRecipients(value: unknown, field: string) {
+  if (!Array.isArray(value)) validationError(`${field} must be an array`)
+  const recipients: string[] = []
+  for (const item of value) {
+    if (typeof item !== 'string') validationError(`${field} must contain email addresses`)
+    const email = normalizeEmail(item.trim(), field)
+    if (!recipients.includes(email)) recipients.push(email)
+  }
+  return recipients
+}
+
+function webhookTokenField(input: JsonRecord, existing: string) {
+  if (!Object.prototype.hasOwnProperty.call(input, 'token')) return existing
+  if (input.token === null) return ''
+  if (typeof input.token !== 'string') validationError('webhook.token must be a string or null')
+  const token = input.token.trim()
+  if (token.length < MIN_WEBHOOK_TOKEN_LENGTH
+    || token.length > MAX_WEBHOOK_TOKEN_LENGTH
+    || !WEBHOOK_TOKEN_PATTERN.test(token)) {
+    validationError(`webhook.token must be between ${MIN_WEBHOOK_TOKEN_LENGTH} and ${MAX_WEBHOOK_TOKEN_LENGTH} characters`)
+  }
+  return token
+}
+
+function webhookTemplateField(
+  input: JsonRecord,
+  key: 'subject' | 'text',
+  maxLength: number,
+) {
+  const value = input[key]
+  if (typeof value !== 'string' || !value.trim() || value.length > maxLength) {
+    validationError(`webhook.${key} is invalid`)
+  }
+  if (key === 'subject' && CONTROL_CHARACTER_PATTERN.test(value)) {
+    validationError('webhook.subject must be a single line')
+  }
+  return key === 'subject' ? value.trim() : value
+}
+
+function normalizeWebhook(value: unknown, existing: MailWebhookConfiguration) {
+  const input = asRecord(value, 'webhook')
+  assertKnownKeys(
+    input,
+    ['revision', 'enabled', 'token', 'to', 'cc', 'subject', 'text'],
+    'webhook',
+  )
+  if (typeof input.enabled !== 'boolean') validationError('webhook.enabled must be a boolean')
+
+  const webhook: MailWebhookConfiguration = {
+    revision: existing.revision,
+    updatedAt: existing.updatedAt,
+    enabled: input.enabled,
+    token: webhookTokenField(input, existing.token),
+    to: normalizeWebhookRecipients(input.to, 'webhook.to'),
+    cc: normalizeWebhookRecipients(input.cc, 'webhook.cc'),
+    subject: webhookTemplateField(input, 'subject', MAX_WEBHOOK_SUBJECT_LENGTH),
+    text: webhookTemplateField(input, 'text', MAX_WEBHOOK_TEXT_LENGTH),
+  }
+  if (webhook.to.length + webhook.cc.length > MAX_WEBHOOK_RECIPIENTS) {
+    validationError(`webhook supports at most ${MAX_WEBHOOK_RECIPIENTS} recipients`)
+  }
+  if (webhook.enabled && (!webhook.token || !webhook.to.length)) {
+    validationError('webhook requires a token and at least one recipient when enabled')
+  }
+  return webhook
 }
 
 function normalizeConfiguration(value: unknown, existing: MailConfiguration): MailConfiguration {
@@ -355,6 +468,84 @@ async function decryptConfiguration(envelope: EncryptedEnvelope, keyValue?: stri
   }
 }
 
+async function encryptWebhookConfiguration(
+  configuration: MailWebhookConfiguration,
+  revision: string,
+  updatedAt: string,
+  keyValue?: string,
+): Promise<EncryptedWebhookEnvelope> {
+  const iv = crypto.getRandomValues(new Uint8Array(AES_GCM_IV_BYTES))
+  const key = await importEncryptionKey(keyValue)
+  const plaintext = encoder.encode(JSON.stringify({
+    enabled: configuration.enabled,
+    token: configuration.token,
+    to: configuration.to,
+    cc: configuration.cc,
+    subject: configuration.subject,
+    text: configuration.text,
+  }))
+  const ciphertext = await crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv, additionalData: MAIL_WEBHOOK_AAD, tagLength: 128 },
+    key,
+    plaintext,
+  )
+  return {
+    schemaVersion: WEBHOOK_STORED_SCHEMA_VERSION,
+    revision,
+    updatedAt,
+    algorithm: 'AES-256-GCM',
+    iv: encodeBase64Url(iv),
+    ciphertext: encodeBase64Url(new Uint8Array(ciphertext)),
+  }
+}
+
+function parseWebhookEnvelope(value: unknown): EncryptedWebhookEnvelope {
+  const input = asRecord(value, 'stored webhook configuration')
+  assertKnownKeys(
+    input,
+    ['schemaVersion', 'revision', 'updatedAt', 'algorithm', 'iv', 'ciphertext'],
+    'stored webhook configuration',
+  )
+  if (input.schemaVersion !== WEBHOOK_STORED_SCHEMA_VERSION
+    || input.algorithm !== 'AES-256-GCM'
+    || typeof input.revision !== 'string'
+    || !UUID_PATTERN.test(input.revision)
+    || typeof input.updatedAt !== 'string'
+    || Number.isNaN(Date.parse(input.updatedAt))
+    || typeof input.iv !== 'string'
+    || typeof input.ciphertext !== 'string') {
+    throw new MailConfigUnavailableError()
+  }
+  return input as unknown as EncryptedWebhookEnvelope
+}
+
+async function decryptWebhookConfiguration(
+  envelope: EncryptedWebhookEnvelope,
+  keyValue?: string,
+) {
+  const iv = decodeBase64(envelope.iv)
+  const ciphertext = decodeBase64(envelope.ciphertext)
+  if (iv.byteLength !== AES_GCM_IV_BYTES || ciphertext.byteLength < 16) {
+    throw new MailConfigUnavailableError()
+  }
+  const key = await importEncryptionKey(keyValue)
+  const plaintext = await crypto.subtle.decrypt(
+    { name: 'AES-GCM', iv, additionalData: MAIL_WEBHOOK_AAD, tagLength: 128 },
+    key,
+    ciphertext,
+  )
+  const parsed = JSON.parse(decoder.decode(plaintext)) as JsonRecord
+  const configuration = normalizeWebhook(
+    { ...parsed, revision: envelope.revision },
+    emptyWebhookConfiguration(),
+  )
+  return {
+    ...configuration,
+    revision: envelope.revision,
+    updatedAt: envelope.updatedAt,
+  }
+}
+
 export async function readMailConfiguration(bindings: MailBindings): Promise<MailConfiguration> {
   const raw = await bindings.ANEKO_KV.get(getKvKey(bindings))
   if (!raw) return emptyConfiguration()
@@ -383,6 +574,39 @@ export async function saveMailConfiguration(bindings: MailBindings, value: unkno
     bindings.MAIL_CONFIG_ENCRYPTION_KEY,
   )
   await bindings.ANEKO_KV.put(getKvKey(bindings), JSON.stringify(envelope))
+  return { ...configuration, revision, updatedAt }
+}
+
+export async function readMailWebhookConfiguration(
+  bindings: MailBindings,
+): Promise<MailWebhookConfiguration> {
+  const raw = await bindings.ANEKO_KV.get(MAIL_WEBHOOK_KEY)
+  if (!raw) return emptyWebhookConfiguration()
+  try {
+    const envelope = parseWebhookEnvelope(JSON.parse(raw))
+    return await decryptWebhookConfiguration(envelope, bindings.MAIL_CONFIG_ENCRYPTION_KEY)
+  } catch (error) {
+    if (error instanceof MailConfigUnavailableError) throw error
+    throw new MailConfigUnavailableError()
+  }
+}
+
+export async function saveMailWebhookConfiguration(bindings: MailBindings, value: unknown) {
+  const existing = await readMailWebhookConfiguration(bindings)
+  const expectedRevision = parseExpectedRevision(value)
+  if (expectedRevision !== existing.revision) {
+    throw new MailConfigConflictError('Webhook configuration has changed; reload and try again')
+  }
+  const configuration = normalizeWebhook(value, existing)
+  const revision = crypto.randomUUID()
+  const updatedAt = new Date().toISOString()
+  const envelope = await encryptWebhookConfiguration(
+    configuration,
+    revision,
+    updatedAt,
+    bindings.MAIL_CONFIG_ENCRYPTION_KEY,
+  )
+  await bindings.ANEKO_KV.put(MAIL_WEBHOOK_KEY, JSON.stringify(envelope))
   return { ...configuration, revision, updatedAt }
 }
 
@@ -422,5 +646,20 @@ export function adminMailConfiguration(configuration: MailConfiguration): MailAd
     displayName: configuration.displayName,
     imap: projectConnection(configuration.imap),
     smtp: projectConnection(configuration.smtp),
+  }
+}
+
+export function adminMailWebhookConfiguration(
+  configuration: MailWebhookConfiguration,
+): MailAdminWebhookConfiguration {
+  return {
+    revision: configuration.revision,
+    updatedAt: configuration.updatedAt,
+    enabled: configuration.enabled,
+    tokenConfigured: Boolean(configuration.token),
+    to: [...configuration.to],
+    cc: [...configuration.cc],
+    subject: configuration.subject,
+    text: configuration.text,
   }
 }
