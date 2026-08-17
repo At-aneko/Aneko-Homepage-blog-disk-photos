@@ -101,21 +101,17 @@
           </button>
         </header>
 
-        <div v-if="!isAuthenticated" class="mailPanelState is-locked">
-          <LockKeyhole :size="25" :stroke-width="1.5" aria-hidden="true" />
-          <span>邮箱内容已锁定</span>
-        </div>
-        <div v-else-if="foldersStatus === 'loading'" class="mailPanelLoading">
+        <div v-if="isAuthenticated && foldersStatus === 'loading'" class="mailPanelLoading">
           <span v-for="index in 6" :key="index"></span>
         </div>
-        <div v-else-if="foldersStatus === 'error'" class="mailPanelState" role="alert">
+        <div v-else-if="isAuthenticated && foldersStatus === 'error'" class="mailPanelState" role="alert">
           <CircleAlert :size="23" :stroke-width="1.5" aria-hidden="true" />
           <span>{{ foldersError }}</span>
           <button type="button" @click="loadFolders">重试</button>
         </div>
         <nav v-else class="mailFolderList">
           <button
-            v-for="folder in folders"
+            v-for="folder in visibleFolders"
             :key="folder.name"
             type="button"
             :class="{ 'is-current': selectedFolder === folder.name }"
@@ -126,7 +122,7 @@
             <span>{{ folderLabel(folder) }}</span>
             <b v-if="folder.unread">{{ compactNumber(folder.unread) }}</b>
           </button>
-          <div v-if="folders.length === 0" class="mailPanelState is-small">
+          <div v-if="visibleFolders.length === 0" class="mailPanelState is-small">
             <Folder :size="22" :stroke-width="1.5" aria-hidden="true" />
             <span>没有可用文件夹</span>
           </div>
@@ -144,7 +140,7 @@
           </button>
           <div>
             <p>MESSAGES</p>
-            <h3>{{ isAuthenticated ? activeFolderLabel : '邮件' }}</h3>
+            <h3>{{ activeFolderLabel }}</h3>
           </div>
           <button type="button" title="刷新邮件" aria-label="刷新邮件" :disabled="isAuthenticated && messagesStatus === 'loading'" @click="refreshMessages">
             <RefreshCw :size="15" :stroke-width="1.8" aria-hidden="true" />
@@ -456,7 +452,7 @@ const showSettings = ref(false)
 const folders = ref<MailFolder[]>([])
 const foldersStatus = ref<RequestStatus>('idle')
 const foldersError = ref('')
-const selectedFolder = ref('')
+const selectedFolder = ref('INBOX')
 const messages = ref<MailSummary[]>([])
 const messagesStatus = ref<RequestStatus>('idle')
 const messagesError = ref('')
@@ -484,8 +480,18 @@ let foldersController: AbortController | null = null
 let messagesController: AbortController | null = null
 let detailController: AbortController | null = null
 
+const previewFolders: MailFolder[] = [
+  { name: 'INBOX' },
+  { name: 'Sent' },
+  { name: 'Drafts' },
+  { name: 'Archive' },
+  { name: 'Junk' },
+  { name: 'Trash' },
+]
+
 const isAuthenticated = computed(() => Boolean(accessCode.value))
-const activeFolder = computed(() => folders.value.find((folder) => folder.name === selectedFolder.value))
+const visibleFolders = computed(() => isAuthenticated.value ? folders.value : previewFolders)
+const activeFolder = computed(() => visibleFolders.value.find((folder) => folder.name === selectedFolder.value))
 const activeFolderLabel = computed(() => activeFolder.value ? folderLabel(activeFolder.value) : '邮件')
 const htmlFallbackText = computed(() => stripHtml(messageDetail.value?.html || ''))
 const safeHtmlBody = computed(() => createSafeHtmlDocument(messageDetail.value?.html || ''))
@@ -701,15 +707,16 @@ async function loadMessageDetail(summary: MailSummary) {
 }
 
 async function selectFolder(name: string) {
-  const folder = folders.value.find((item) => item.name === name)
+  const folder = visibleFolders.value.find((item) => item.name === name)
   if (!folder || !isSelectableFolder(folder)) return
-  if (selectedFolder.value === name && messagesStatus.value === 'ready') {
+  if (selectedFolder.value === name && (messagesStatus.value === 'ready' || !isAuthenticated.value)) {
     mobileView.value = 'messages'
     return
   }
   selectedFolder.value = name
   cursorHistory.value = [null]
   mobileView.value = 'messages'
+  if (!isAuthenticated.value) return
   await loadMessages(null)
 }
 
@@ -911,7 +918,7 @@ function resetMailbox() {
   folders.value = []
   foldersStatus.value = 'idle'
   foldersError.value = ''
-  selectedFolder.value = ''
+  selectedFolder.value = isAuthenticated.value ? '' : 'INBOX'
   resetMessageState()
 }
 
@@ -939,8 +946,10 @@ function folderIcon(folder: MailFolder): Component {
   const value = `${folder.name} ${(folder.attributes || []).join(' ')}`.toLowerCase()
   if (value.includes('inbox')) return Inbox
   if (value.includes('sent')) return Send
+  if (value.includes('draft')) return FileText
   if (value.includes('trash') || value.includes('deleted')) return Trash2
   if (value.includes('archive')) return Archive
+  if (value.includes('junk') || value.includes('spam')) return Mail
   return Folder
 }
 
