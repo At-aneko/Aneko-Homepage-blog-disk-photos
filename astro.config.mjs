@@ -19,4 +19,10 @@ export default defineConfig({
       remarkPlugins: [remarkDirective, remarkGithubCard],
     }),
   },
+  vite: {
+    build: {
+      // Keep the wallpaper backdrop-filter declarations in the production CSS.
+      cssMinify: false,
+    },
+  },
 })
