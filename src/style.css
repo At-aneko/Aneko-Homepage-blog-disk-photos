@@ -46,7 +46,7 @@ a:focus-visible {
   --footer_text_color: #ffffff;
   --left_tag_item: rgba(235, 240, 250, 0.35);
   --card_filter: 0px;
-  --back_filter: 8px;
+  --back_filter: 12px;
   --back_filter_color: rgba(0, 0, 0, 0.08);
   --fill: #ffffff;
   --module_dock_bg: rgba(255, 255, 255, 0.26);
@@ -102,7 +102,7 @@ a:focus-visible {
   --footer_text_color: #ffffff;
   --left_tag_item: rgba(19, 20, 24, 0.35);
   --card_filter: 0px;
-  --back_filter: 8px;
+  --back_filter: 12px;
   --back_filter_color: rgba(0, 0, 0, 0.35);
   --fill: #ffffff;
   --module_dock_bg: rgba(16, 17, 20, 0.42);
