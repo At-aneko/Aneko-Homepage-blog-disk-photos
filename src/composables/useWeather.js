@@ -2,6 +2,8 @@
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 
 const WEATHER_API = 'https://uapis.cn/api/v1/misc/weather?lang=zh&extended=true&forecast=true&hourly=true&minutely=true&indices=true'
+const CACHE_KEY = 'aneko-weather-cache-v1'
+const CACHE_TTL = 10 * 60 * 1000
 
 const LIFE_INDEX_LABELS = {
   clothing: '穿衣',
@@ -173,6 +175,25 @@ function normalizeWeather(data) {
   }
 }
 
+function readCache() {
+  try {
+    const cached = JSON.parse(window.localStorage.getItem(CACHE_KEY) || 'null')
+    if (!cached || typeof cached.cachedAt !== 'number' || !cached.data) return null
+    if (!Number.isFinite(cached.data.temperature) || typeof cached.data.condition !== 'string') return null
+    return cached
+  } catch {
+    return null
+  }
+}
+
+function writeCache(data) {
+  try {
+    window.localStorage.setItem(CACHE_KEY, JSON.stringify({ cachedAt: Date.now(), data }))
+  } catch {
+    // Weather remains usable when storage is unavailable.
+  }
+}
+
 export function useWeather() {
   const weather = ref(null)
   const status = ref('loading')
@@ -197,6 +218,7 @@ export function useWeather() {
       }
 
       weather.value = normalizeWeather(await response.json())
+      writeCache(weather.value)
       status.value = 'ready'
     } catch (error) {
       if (requestController.signal.aborted) return
@@ -207,7 +229,17 @@ export function useWeather() {
     }
   }
 
-  onMounted(refresh)
+  onMounted(() => {
+    const cached = readCache()
+    if (cached) {
+      weather.value = cached.data
+      if (Date.now() - cached.cachedAt < CACHE_TTL) {
+        status.value = 'ready'
+        return
+      }
+    }
+    refresh()
+  })
   onBeforeUnmount(() => controller?.abort())
 
   return { weather, status, errorMessage, refresh }

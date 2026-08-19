@@ -71,8 +71,12 @@ const isMounted = ref(false)
 const turnstileToken = ref('')
 const turnstileKey = ref(0)
 
-onMounted(() => {
+onMounted(async () => {
   isMounted.value = true
+  if (props.open) {
+    await nextTick()
+    input.value?.focus()
+  }
 })
 
 watch(() => props.open, async (open) => {

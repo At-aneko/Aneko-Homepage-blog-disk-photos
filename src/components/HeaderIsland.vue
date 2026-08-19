@@ -5,7 +5,7 @@
     :compact="compact"
     :active-section="blogSection"
     @toggle-theme="toggleTheme"
-    @open-search="searchOpen = true"
+    @open-search="openSearch"
   />
   <WorkspaceHeader
     v-else-if="page === 'photos' || page === 'drive' || page === 'mail'"
@@ -20,21 +20,22 @@
     @toggle-theme="toggleTheme"
   />
   <PopupModal
-    v-if="page === 'home'"
+    v-if="page === 'home' && popupImage"
     :image-url="popupImage"
     @close="popupImage = ''"
   />
-  <BlogSearch v-if="page === 'blog'" :open="searchOpen" @close="searchOpen = false" />
+  <BlogSearch v-if="page === 'blog' && searchLoaded" :open="searchOpen" @close="closeSearch" />
 </template>
 
 <script setup>
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { defineAsyncComponent, onBeforeUnmount, onMounted, ref } from 'vue'
 import BlogHeader from './BlogHeader.vue'
-import BlogSearch from './BlogSearch.vue'
 import PageHeader from './PageHeader.vue'
 import PopupModal from './PopupModal.vue'
 import WorkspaceHeader from './WorkspaceHeader.vue'
 import { setCookie } from '../utils/cookie.js'
+
+const BlogSearch = defineAsyncComponent(() => import('./BlogSearch.vue'))
 
 defineOptions({ inheritAttrs: false })
 
@@ -55,15 +56,26 @@ const props = defineProps({
 
 const theme = ref('Light')
 const searchOpen = ref(false)
+const searchLoaded = ref(false)
 const popupImage = ref('')
+
+function openSearch() {
+  searchLoaded.value = true
+  searchOpen.value = true
+}
+
+function closeSearch() {
+  searchOpen.value = false
+}
 
 function handleSearchShortcut(event) {
   if ((event.metaKey || event.ctrlKey) && event.key.toLocaleLowerCase() === 'k') {
     event.preventDefault()
-    searchOpen.value = !searchOpen.value
+    if (searchOpen.value) closeSearch()
+    else openSearch()
   }
 
-  if (event.key === 'Escape') searchOpen.value = false
+  if (event.key === 'Escape') closeSearch()
 }
 
 function toggleTheme() {

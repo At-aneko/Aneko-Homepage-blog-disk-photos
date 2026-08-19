@@ -251,7 +251,7 @@
           </div>
           <div class="mailBody">
             <iframe
-              v-if="bodyMode === 'html' && messageDetail.html"
+              v-if="bodyMode === 'html' && messageDetail.html && safeHtmlBody"
               class="mailHtmlBody"
               title="隔离的 HTML 邮件正文"
               sandbox
@@ -275,7 +275,7 @@
       </article>
     </div>
 
-    <AdminLoginDialog :open="showLogin" @close="showLogin = false" @authenticated="handleAuthenticated" />
+    <AdminLoginDialog v-if="loginDialogLoaded" :open="showLogin" @close="showLogin = false" @authenticated="handleAuthenticated" />
 
     <Teleport v-if="isMounted && isAuthenticated" to="body">
       <Transition name="mail-modal">
@@ -329,8 +329,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch, type Component } from 'vue'
-import DOMPurify from 'dompurify'
+import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, reactive, ref, watch, type Component } from 'vue'
 import {
   Archive,
   ChevronLeft,
@@ -355,9 +354,10 @@ import {
   Trash2,
   X,
 } from '@lucide/vue'
-import AdminLoginDialog from './AdminLoginDialog.vue'
-import MailSettingsPanel from './MailSettingsPanel.vue'
 import { ApiRequestError, apiRequest, clearAdminAccess, restoreAdminAccess } from '../utils/admin-client'
+
+const AdminLoginDialog = defineAsyncComponent(() => import('./AdminLoginDialog.vue'))
+const MailSettingsPanel = defineAsyncComponent(() => import('./MailSettingsPanel.vue'))
 
 const props = defineProps<{ publicAddress?: string }>()
 
@@ -441,9 +441,20 @@ interface DetailResponse {
 type RequestStatus = 'idle' | 'loading' | 'ready' | 'error'
 type MobileView = 'folders' | 'messages' | 'detail'
 
+const mailTimeFormatter = new Intl.DateTimeFormat('zh-CN', {
+  hour: '2-digit', minute: '2-digit', hour12: false,
+})
+const mailShortDateFormatter = new Intl.DateTimeFormat('zh-CN', {
+  month: '2-digit', day: '2-digit',
+})
+const mailFullDateFormatter = new Intl.DateTimeFormat('zh-CN', {
+  year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false,
+})
+
 const accessCode = ref('')
 const authChecking = ref(true)
 const showLogin = ref(false)
+const loginDialogLoaded = ref(false)
 const isMounted = ref(false)
 const config = ref<MailConfig | null>(null)
 const configStatus = ref<RequestStatus>('idle')
@@ -494,7 +505,12 @@ const visibleFolders = computed(() => isAuthenticated.value ? folders.value : pr
 const activeFolder = computed(() => visibleFolders.value.find((folder) => folder.name === selectedFolder.value))
 const activeFolderLabel = computed(() => activeFolder.value ? folderLabel(activeFolder.value) : '邮件')
 const htmlFallbackText = computed(() => stripHtml(messageDetail.value?.html || ''))
-const safeHtmlBody = computed(() => createSafeHtmlDocument(messageDetail.value?.html || ''))
+const safeHtmlBody = ref('')
+let htmlSanitizeEpoch = 0
+
+watch(showLogin, (open) => {
+  if (open) loginDialogLoaded.value = true
+}, { flush: 'sync' })
 
 function authHeaders(contentType?: string) {
   return {
@@ -1002,18 +1018,14 @@ function formatListDate(value: string | null) {
   if (Number.isNaN(date.valueOf())) return ''
   const now = new Date()
   const sameDay = date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth() && date.getDate() === now.getDate()
-  return new Intl.DateTimeFormat('zh-CN', sameDay
-    ? { hour: '2-digit', minute: '2-digit', hour12: false }
-    : { month: '2-digit', day: '2-digit' }).format(date)
+  return (sameDay ? mailTimeFormatter : mailShortDateFormatter).format(date)
 }
 
 function formatFullDate(value: string | null) {
   if (!value) return '—'
   const date = new Date(value)
   if (Number.isNaN(date.valueOf())) return value || '—'
-  return new Intl.DateTimeFormat('zh-CN', {
-    year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false,
-  }).format(date)
+  return mailFullDateFormatter.format(date)
 }
 
 function formatBytes(value: number | undefined) {
@@ -1027,12 +1039,13 @@ function formatBytes(value: number | undefined) {
 function stripHtml(value: string) {
   if (!value) return ''
   if (typeof window === 'undefined') return ''
-  const document = new DOMParser().parseFromString(value, 'text/html')
-  return document.body.textContent?.replace(/\n{3,}/g, '\n\n').trim() || ''
+  const parsedDocument = new DOMParser().parseFromString(value, 'text/html')
+  return parsedDocument.body.textContent?.replace(/\n{3,}/g, '\n\n').trim() || ''
 }
 
-function createSafeHtmlDocument(value: string) {
+async function createSafeHtmlDocument(value: string) {
   if (!value || typeof window === 'undefined') return ''
+  const { default: DOMPurify } = await import('dompurify')
   const clean = DOMPurify.sanitize(value, {
     FORBID_TAGS: ['script', 'iframe', 'frame', 'frameset', 'object', 'embed', 'form', 'input', 'button', 'textarea', 'select', 'option', 'svg', 'math', 'base'],
     FORBID_ATTR: ['srcset', 'formaction', 'ping'],
@@ -1066,6 +1079,25 @@ function showNotice(message: string, kind: 'success' | 'error' = 'success') {
 watch(showComposer, (open) => {
   if (typeof document !== 'undefined') document.documentElement.style.overflow = open ? 'hidden' : ''
 })
+
+watch(
+  () => bodyMode.value === 'html' ? messageDetail.value?.html || '' : '',
+  async (html) => {
+    const epoch = ++htmlSanitizeEpoch
+    if (!html) {
+      safeHtmlBody.value = ''
+      return
+    }
+    try {
+      const safeDocument = await createSafeHtmlDocument(html)
+      if (epoch === htmlSanitizeEpoch) safeHtmlBody.value = safeDocument
+    } catch {
+      if (epoch !== htmlSanitizeEpoch) return
+      safeHtmlBody.value = ''
+      showNotice('HTML 正文处理失败，已显示纯文本', 'error')
+    }
+  },
+)
 
 watch(
   () => [compose.to, compose.cc, compose.subject, compose.text],

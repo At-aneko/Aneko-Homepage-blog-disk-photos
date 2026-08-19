@@ -19,10 +19,4 @@ export default defineConfig({
       remarkPlugins: [remarkDirective, remarkGithubCard],
     }),
   },
-  vite: {
-    build: {
-      // Preserve both backdrop-filter declarations used by the original site.
-      cssMinify: false
-    }
-  }
 })

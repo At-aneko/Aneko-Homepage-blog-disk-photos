@@ -49,8 +49,13 @@
   </nav>
 
   <div ref="modulePanelRef" class="moduleContent">
-      <div v-show="activeModule === 'all' || activeModule === 'github'">
-        <GitHubWidget />
+      <div
+        ref="githubMountRef"
+        class="githubMount"
+        v-show="activeModule === 'all' || activeModule === 'github'"
+        :aria-busy="!shouldMountGitHub"
+      >
+        <GitHubWidget v-if="shouldMountGitHub" />
       </div>
 
       <div v-show="activeModule === 'all' || activeModule === 'site'">
@@ -129,11 +134,12 @@
 </template>
 
 <script setup>
-import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { ExternalLink, Link2 } from '@lucide/vue'
-import GitHubWidget from './GitHubWidget.vue'
 import TimeWidget from './TimeWidget.vue'
 import WeatherWidget from './WeatherWidget.vue'
+
+const GitHubWidget = defineAsyncComponent(() => import('./GitHubWidget.vue'))
 
 const moduleTabs = [
   { id: 'all', label: '所有内容' },
@@ -144,20 +150,58 @@ const moduleTabs = [
 const activeModule = ref('all')
 const modulePanelRef = ref(null)
 const isMobileDock = ref(false)
+const githubMountRef = ref(null)
+const shouldMountGitHub = ref(false)
 let switchAnimation = null
 let dockMediaQuery = null
+let githubObserver = null
+let githubIdleHandle = null
+let githubIdleUsesRequestIdleCallback = false
 
 function syncDockOrientation(event) {
   isMobileDock.value = event.matches
+}
+
+function clearGitHubIdle() {
+  if (githubIdleHandle === null) return
+  if (githubIdleUsesRequestIdleCallback && 'cancelIdleCallback' in window) {
+    window.cancelIdleCallback(githubIdleHandle)
+  } else {
+    window.clearTimeout(githubIdleHandle)
+  }
+  githubIdleHandle = null
+}
+
+function mountGitHub() {
+  if (shouldMountGitHub.value) return
+  shouldMountGitHub.value = true
+  githubObserver?.disconnect()
+  githubObserver = null
+  clearGitHubIdle()
 }
 
 onMounted(() => {
   dockMediaQuery = window.matchMedia('(max-width: 800px)')
   syncDockOrientation(dockMediaQuery)
   dockMediaQuery.addEventListener('change', syncDockOrientation)
+
+  if ('IntersectionObserver' in window && githubMountRef.value) {
+    githubObserver = new IntersectionObserver(([entry]) => {
+      if (entry?.isIntersecting) mountGitHub()
+    }, { rootMargin: '200px 0px' })
+    githubObserver.observe(githubMountRef.value)
+  }
+
+  if ('requestIdleCallback' in window) {
+    githubIdleUsesRequestIdleCallback = true
+    githubIdleHandle = window.requestIdleCallback(mountGitHub, { timeout: 3000 })
+  } else {
+    githubIdleHandle = window.setTimeout(mountGitHub, 1800)
+  }
 })
 
 async function selectModule(moduleId) {
+  if (moduleId === 'all' || moduleId === 'github') mountGitHub()
   if (moduleId === activeModule.value) return
 
   const previousIndex = moduleTabs.findIndex((tab) => tab.id === activeModule.value)
@@ -192,6 +236,8 @@ async function selectModule(moduleId) {
 onBeforeUnmount(() => {
   switchAnimation?.cancel()
   dockMediaQuery?.removeEventListener('change', syncDockOrientation)
+  githubObserver?.disconnect()
+  clearGitHubIdle()
 })
 
 function handleTabKeydown(event, currentIndex) {
@@ -228,3 +274,9 @@ const externalLinks = [
   { name: '探针', meta: 'tz.aneko.ink', url: 'https://tz.aneko.ink' },
 ]
 </script>
+
+<style scoped>
+.githubMount {
+  min-height: 320px;
+}
+</style>

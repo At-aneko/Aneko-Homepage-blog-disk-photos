@@ -26,6 +26,10 @@ if (!post) Astro.response.status = 404
   keywords={post ? `Aneko,个人博客,${post.data.tags.join(',')}` : 'Aneko,个人博客'}
   compactHeader
 >
+  <script>
+    import '../../scripts/blog-code-blocks.js'
+    import '../../scripts/github-cards.js'
+  </script>
   {post && rendered ? (
     <article class="blogArticle">
       <nav class="blogBreadcrumb" aria-label="文章路径">

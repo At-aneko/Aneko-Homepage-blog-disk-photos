@@ -28,10 +28,6 @@ const {
   loadingMode="blog-entry"
   breadcrumb={{ name: '博客', path: '/blog/' }}
 >
-  <script>
-    import '../scripts/blog-code-blocks.js'
-    import '../scripts/github-cards.js'
-  </script>
   <main class="at-main blogShell">
     <LeftSidebar transition:persist="blog-sidebar" />
     <div class="at-right blogRight">
@@ -47,5 +43,5 @@ const {
       </div>
     </div>
   </main>
-  <PageFooter client:load />
+  <PageFooter client:visible />
 </SiteLayout>

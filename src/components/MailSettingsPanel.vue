@@ -278,6 +278,10 @@ interface ProtocolPayload {
 
 type TestTarget = 'imap' | 'smtp'
 
+const mailSettingsDateFormatter = new Intl.DateTimeFormat('zh-CN', {
+  year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false,
+})
+
 const props = defineProps<{
   config: MailConfig | null
   accessCode: string
@@ -664,9 +668,7 @@ function requestError(error: unknown, fallback: string, notifyUnauthorized = tru
 function formatDate(value: string) {
   const date = new Date(value)
   if (Number.isNaN(date.valueOf())) return value
-  return new Intl.DateTimeFormat('zh-CN', {
-    year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false,
-  }).format(date)
+  return mailSettingsDateFormatter.format(date)
 }
 
 watch(() => props.config, (value) => {

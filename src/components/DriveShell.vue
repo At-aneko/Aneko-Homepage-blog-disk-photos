@@ -128,40 +128,14 @@
       <span>{{ isAuthenticated ? '释放以上传文件' : '请先登录管理员' }}</span>
     </div>
 
-    <Teleport v-if="isMounted" to="body">
-      <Transition name="drive-modal">
-        <div v-if="showAuthDialog" class="driveModalBackdrop" role="dialog" aria-modal="true" aria-labelledby="drive-auth-title" @mousedown.self="closeAuthDialog">
-          <form class="driveModal driveAuthModal" @submit.prevent="submitAuth">
-            <header>
-              <div>
-                <p>ADMIN ACCESS</p>
-                <h3 id="drive-auth-title">管理员登录</h3>
-              </div>
-              <button type="button" title="关闭" aria-label="关闭" @click="closeAuthDialog">
-                <X :size="18" :stroke-width="1.8" aria-hidden="true" />
-              </button>
-            </header>
-            <label for="drive-access-code">访问码</label>
-            <div class="driveInputWrap">
-              <LockKeyhole :size="17" :stroke-width="1.7" aria-hidden="true" />
-              <input id="drive-access-code" v-model="authCodeInput" type="password" autocomplete="current-password" required />
-            </div>
-            <TurnstileWidget
-              :key="turnstileKey"
-              :site-key="TURNSTILE_SITE_KEY"
-              action="admin_login"
-              @token="handleTurnstileToken"
-              @expired="handleTurnstileExpired"
-              @error="handleTurnstileError"
-            />
-            <p v-if="authError" class="driveFormError">{{ authError }}</p>
-            <button class="drivePrimaryButton" type="submit" :disabled="authSubmitting">
-              {{ authSubmitting ? '验证中' : '登录' }}
-            </button>
-          </form>
-        </div>
-      </Transition>
+    <AdminLoginDialog
+      v-if="authDialogLoaded"
+      :open="showAuthDialog"
+      @close="closeAuthDialog"
+      @authenticated="handleAuthenticated"
+    />
 
+    <Teleport v-if="isMounted" to="body">
       <Transition name="drive-modal">
         <div v-if="showSpeedDialog" class="driveModalBackdrop" role="dialog" aria-modal="true" aria-labelledby="drive-speed-title" @mousedown.self="closeSpeedDialog">
           <section class="driveModal driveSpeedModal">
@@ -286,7 +260,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, type Component } from 'vue'
+import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, type Component } from 'vue'
 import {
   Archive,
   ChevronRight,
@@ -303,7 +277,6 @@ import {
   HardDrive,
   House,
   Image as ImageIcon,
-  LockKeyhole,
   LogIn,
   LogOut,
   Music,
@@ -313,15 +286,9 @@ import {
   Upload,
   X,
 } from '@lucide/vue'
-import {
-  apiRequest,
-  clearAdminAccess,
-  restoreAdminAccess,
-  storeAdminAccess,
-  verifyAdminAccess as verifyAdminAccessRequest,
-} from '../utils/admin-client'
-import TurnstileWidget from './TurnstileWidget.vue'
-import { TURNSTILE_SITE_KEY } from '../utils/turnstile-client'
+import { apiRequest, clearAdminAccess, restoreAdminAccess } from '../utils/admin-client'
+
+const AdminLoginDialog = defineAsyncComponent(() => import('./AdminLoginDialog.vue'))
 
 interface DriveFile {
   key: string
@@ -339,6 +306,10 @@ const MEBIBYTE = 1024 * 1024
 const SPEED_TEST_DURATION_SECONDS = 60
 const SPEED_TEST_DURATION_MS = SPEED_TEST_DURATION_SECONDS * 1000
 const SPEED_TEST_DOWNLOAD_URL = '/api/drive/speed-test?duration=1800'
+const driveFileCollator = new Intl.Collator('zh-CN')
+const driveDateFormatter = new Intl.DateTimeFormat('zh-CN', {
+  year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
+})
 
 const files = ref<DriveFile[]>([])
 const isMounted = ref(false)
@@ -350,11 +321,7 @@ const isAuthenticated = ref(false)
 const isUploading = ref(false)
 const fileInput = ref<HTMLInputElement | null>(null)
 const showAuthDialog = ref(false)
-const authCodeInput = ref('')
-const authError = ref('')
-const authSubmitting = ref(false)
-const turnstileToken = ref('')
-const turnstileKey = ref(0)
+const authDialogLoaded = ref(false)
 const showFolderDialog = ref(false)
 const folderName = ref('')
 const folderError = ref('')
@@ -386,7 +353,7 @@ let lastSpeedMetricAt = 0
 const pathParts = computed(() => prefix.value.split('/').filter(Boolean))
 const sortedFiles = computed(() => [...files.value].sort((a, b) => {
   if (a.isFolder !== b.isFolder) return a.isFolder ? -1 : 1
-  return displayName(a).localeCompare(displayName(b), 'zh-CN')
+  return driveFileCollator.compare(displayName(a), displayName(b))
 }))
 const speedTimeProgress = computed(() => Math.min(100, (speedElapsedMs.value / SPEED_TEST_DURATION_MS) * 100))
 const speedRemainingMs = computed(() => Math.max(0, SPEED_TEST_DURATION_MS - speedElapsedMs.value))
@@ -492,9 +459,7 @@ function formatFileSize(bytes: number) {
 function formatDate(value: string) {
   if (!value) return '—'
   const date = new Date(value)
-  return Number.isNaN(date.valueOf()) ? '—' : new Intl.DateTimeFormat('zh-CN', {
-    year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
-  }).format(date)
+  return Number.isNaN(date.valueOf()) ? '—' : driveDateFormatter.format(date)
 }
 
 function formatSpeed(value: number) {
@@ -517,55 +482,19 @@ function showNotice(message: string, kind: 'success' | 'error' = 'success') {
 }
 
 function openAuthDialog() {
-  authCodeInput.value = ''
-  authError.value = ''
-  turnstileToken.value = ''
-  turnstileKey.value += 1
+  authDialogLoaded.value = true
   showAuthDialog.value = true
 }
 
 function closeAuthDialog() {
-  if (!authSubmitting.value) showAuthDialog.value = false
+  showAuthDialog.value = false
 }
 
-function handleTurnstileToken(token: string) {
-  turnstileToken.value = token
-  authError.value = ''
-}
-
-function handleTurnstileExpired() {
-  turnstileToken.value = ''
-  authError.value = '安全验证已过期，请重新验证'
-}
-
-function handleTurnstileError() {
-  turnstileToken.value = ''
-  authError.value = '安全验证加载失败，请刷新后重试'
-}
-
-async function verifyAdminAccess(codeValue: string) {
-  const token = turnstileToken.value
-  if (!token) throw new Error('请完成安全验证')
-  turnstileToken.value = ''
-  turnstileKey.value += 1
-  return verifyAdminAccessRequest(codeValue, token)
-}
-
-async function submitAuth() {
-  authSubmitting.value = true
-  authError.value = ''
-  try {
-    if (!await verifyAdminAccess(authCodeInput.value)) throw new Error('访问码不正确')
-    accessCode.value = authCodeInput.value
-    isAuthenticated.value = true
-    storeAdminAccess(accessCode.value)
-    showAuthDialog.value = false
-    showNotice('管理员登录成功')
-  } catch (error) {
-    authError.value = error instanceof Error ? error.message : '登录失败'
-  } finally {
-    authSubmitting.value = false
-  }
+function handleAuthenticated(code: string) {
+  accessCode.value = code
+  isAuthenticated.value = true
+  showAuthDialog.value = false
+  showNotice('管理员登录成功')
 }
 
 function logout() {

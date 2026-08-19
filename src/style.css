@@ -16,7 +16,6 @@
   padding: 0;
   box-sizing: border-box;
   user-select: none;
-  transition: background-color 0.2s ease;
 }
 
 a {
@@ -1353,6 +1352,10 @@ body {
 }
 
 @media (max-width: 800px) {
+  body {
+    background-attachment: scroll;
+  }
+
   .at-left {
     display: none;
   }

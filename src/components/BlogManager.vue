@@ -106,7 +106,7 @@
       </table>
     </div>
 
-    <AdminLoginDialog :open="showLogin" @close="showLogin = false" @authenticated="handleAuthenticated" />
+    <AdminLoginDialog v-if="loginDialogLoaded" :open="showLogin" @close="showLogin = false" @authenticated="handleAuthenticated" />
 
     <Teleport v-if="isMounted" to="body">
       <Transition name="manager-editor">
@@ -239,7 +239,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import {
   CircleAlert,
   CircleCheck,
@@ -260,9 +260,10 @@ import {
   Upload,
   X,
 } from '@lucide/vue'
-import AdminLoginDialog from './AdminLoginDialog.vue'
 import { apiRequest, clearAdminAccess, restoreAdminAccess } from '../utils/admin-client'
 import { isValidBlogSlug } from '../utils/blog-config'
+
+const AdminLoginDialog = defineAsyncComponent(() => import('./AdminLoginDialog.vue'))
 
 interface StoredBlogPost {
   slug: string
@@ -306,6 +307,10 @@ interface BlogForm {
 
 type ManagerStatus = 'loading' | 'ready' | 'error'
 
+const blogManagerDateFormatter = new Intl.DateTimeFormat('zh-CN', {
+  year: 'numeric', month: '2-digit', day: '2-digit',
+})
+
 const posts = ref<StoredBlogPost[]>([])
 const isMounted = ref(false)
 const assets = ref<BlogAsset[]>([])
@@ -313,6 +318,7 @@ const accessCode = ref('')
 const isAuthenticated = computed(() => Boolean(accessCode.value))
 const authChecking = ref(true)
 const showLogin = ref(false)
+const loginDialogLoaded = ref(false)
 const status = ref<ManagerStatus>('ready')
 const errorMessage = ref('')
 const notice = ref('')
@@ -330,6 +336,10 @@ const markdownInput = ref<HTMLInputElement | null>(null)
 const heroInput = ref<HTMLInputElement | null>(null)
 const assetInput = ref<HTMLInputElement | null>(null)
 let noticeTimer: number | null = null
+
+watch(showLogin, (open) => {
+  if (open) loginDialogLoaded.value = true
+}, { flush: 'sync' })
 
 const form = reactive<BlogForm>(emptyForm())
 
@@ -683,9 +693,7 @@ function formatFileSize(bytes: number) {
 
 function formatDate(value: string) {
   const date = new Date(value)
-  return Number.isNaN(date.valueOf()) ? '—' : new Intl.DateTimeFormat('zh-CN', {
-    year: 'numeric', month: '2-digit', day: '2-digit',
-  }).format(date)
+  return Number.isNaN(date.valueOf()) ? '—' : blogManagerDateFormatter.format(date)
 }
 
 function showNotice(message: string, kind: 'success' | 'error' = 'success') {

@@ -9,12 +9,17 @@ import { ref, onMounted, onUnmounted } from 'vue'
 
 const currentYear = new Date().getFullYear()
 const isVisible = ref(false)
+let scrollFrame = null
 
 function handleScroll() {
-  const scrollTop = window.scrollY || document.documentElement.scrollTop
-  const windowHeight = window.innerHeight
-  const documentHeight = document.documentElement.scrollHeight
-  isVisible.value = scrollTop + windowHeight >= documentHeight - 10
+  if (scrollFrame !== null) return
+  scrollFrame = window.requestAnimationFrame(() => {
+    scrollFrame = null
+    const scrollTop = window.scrollY || document.documentElement.scrollTop
+    const windowHeight = window.innerHeight
+    const documentHeight = document.documentElement.scrollHeight
+    isVisible.value = scrollTop + windowHeight >= documentHeight - 10
+  })
 }
 
 onMounted(() => {
@@ -24,5 +29,6 @@ onMounted(() => {
 
 onUnmounted(() => {
   window.removeEventListener('scroll', handleScroll)
+  if (scrollFrame !== null) window.cancelAnimationFrame(scrollFrame)
 })
 </script>

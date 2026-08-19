@@ -26,7 +26,7 @@
           <Upload :size="15" :stroke-width="1.8" aria-hidden="true" />
           <span>{{ isUploading ? '上传中' : '上传' }}</span>
         </button>
-        <button type="button" title="刷新相册" aria-label="刷新相册" :disabled="status === 'loading'" @click="loadPhotos">
+        <button type="button" title="刷新相册" aria-label="刷新相册" :disabled="status === 'loading'" @click="loadPhotos(true)">
           <RefreshCw :size="16" :stroke-width="1.8" aria-hidden="true" />
         </button>
         <button
@@ -57,7 +57,7 @@
       <Images :size="30" :stroke-width="1.5" aria-hidden="true" />
       <h3>相册载入失败</h3>
       <p>{{ errorMessage }}</p>
-      <button type="button" @click="loadPhotos">重新载入</button>
+      <button type="button" @click="loadPhotos(true)">重新载入</button>
     </div>
 
     <div v-else-if="status === 'empty'" class="workspaceState">
@@ -73,6 +73,7 @@
         v-for="(photo, index) in photos"
         :key="photo.key"
         class="photoTile"
+        :class="{ 'has-entry-animation': index < 24 }"
         :style="{ '--photo-index': index % 12 }"
       >
         <button
@@ -87,10 +88,14 @@
               :loading="index < 6 ? 'eager' : 'lazy'"
               :fetchpriority="index < 3 ? 'high' : 'auto'"
               decoding="async"
-              @load="markLoaded(photo.key)"
-              @error="markLoaded(photo.key)"
+              @load="markLoaded(photo.key, $event)"
+              @error="markLoaded(photo.key, $event)"
             />
-            <span v-if="!loadedPhotos.has(photo.key)" class="photoTileSkeleton"></span>
+            <span
+              v-if="!loadedPhotos.has(photo.key)"
+              class="photoTileSkeleton"
+              :class="{ 'is-animated': index < 24 }"
+            ></span>
           </span>
         </button>
         <div v-if="isAuthenticated" class="photoAdminActions" role="toolbar" :aria-label="`管理 ${photo.title || `第 ${index + 1} 张照片`}`">
@@ -130,7 +135,7 @@
       ></div>
     </div>
 
-    <AdminLoginDialog :open="showLogin" @close="showLogin = false" @authenticated="handleAuthenticated" />
+    <AdminLoginDialog v-if="loginDialogLoaded" :open="showLogin" @close="showLogin = false" @authenticated="handleAuthenticated" />
 
     <Teleport v-if="isMounted" to="body">
       <Transition name="photo-modal">
@@ -214,7 +219,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import {
   ArrowLeft,
   ArrowRight,
@@ -235,8 +240,9 @@ import {
   Upload,
   X,
 } from '@lucide/vue'
-import AdminLoginDialog from './AdminLoginDialog.vue'
 import { apiRequest, clearAdminAccess, restoreAdminAccess } from '../utils/admin-client'
+
+const AdminLoginDialog = defineAsyncComponent(() => import('./AdminLoginDialog.vue'))
 
 interface RawPhoto {
   title?: string
@@ -273,6 +279,7 @@ const toastMessage = ref('')
 const accessCode = ref('')
 const isAuthenticated = computed(() => Boolean(accessCode.value))
 const showLogin = ref(false)
+const loginDialogLoaded = ref(false)
 const uploadInput = ref<HTMLInputElement | null>(null)
 const isUploading = ref(false)
 const operationBusy = ref(false)
@@ -289,11 +296,17 @@ let operationTimer: number | null = null
 let masonryFrame: number | null = null
 let masonryObserver: ResizeObserver | null = null
 let observedMasonryWidth = 0
+let masonryLayoutAll = false
+const pendingMasonryTiles = new Set<HTMLElement>()
 
 const flatImages = computed(() => photos.value.flatMap((photo) => (
   photo.images.map((image) => ({ photo, image }))
 )))
 const activeImage = computed(() => flatImages.value[activeImageIndex.value] || null)
+
+watch(showLogin, (open) => {
+  if (open) loginDialogLoaded.value = true
+}, { flush: 'sync' })
 
 function encodePath(path: string) {
   return path
@@ -343,7 +356,7 @@ async function applyManifest(nextManifest: RawPhoto[]) {
   scheduleMasonryLayout()
 }
 
-async function loadPhotos() {
+async function loadPhotos(forceRefresh = false) {
   abortController?.abort()
   abortController = new AbortController()
   masonryObserver?.disconnect()
@@ -352,7 +365,7 @@ async function loadPhotos() {
 
   try {
     const response = await fetch('/api/photos', {
-      cache: 'no-store',
+      cache: forceRefresh ? 'reload' : 'default',
       signal: abortController.signal,
     })
     if (!response.ok) throw new Error(`HTTP ${response.status}`)
@@ -367,33 +380,54 @@ async function loadPhotos() {
   }
 }
 
-function scheduleMasonryLayout() {
-  if (masonryFrame !== null) cancelAnimationFrame(masonryFrame)
+function scheduleMasonryLayout(tile?: HTMLElement | null) {
+  if (tile && !masonryLayoutAll) {
+    pendingMasonryTiles.add(tile)
+  } else if (!tile) {
+    masonryLayoutAll = true
+    pendingMasonryTiles.clear()
+  }
+  if (masonryFrame !== null) return
+
   masonryFrame = requestAnimationFrame(() => {
     masonryFrame = null
     const root = masonryRoot.value
+    const layoutAll = masonryLayoutAll
+    const pendingTiles = [...pendingMasonryTiles]
+    masonryLayoutAll = false
+    pendingMasonryTiles.clear()
     if (!root) return
+
     const styles = getComputedStyle(root)
     const rowHeight = Number.parseFloat(styles.gridAutoRows) || 1
     const rowGap = Number.parseFloat(styles.rowGap) || 0
+    const tiles = layoutAll
+      ? [...root.querySelectorAll<HTMLElement>('.photoTile')]
+      : pendingTiles.filter((item) => item.isConnected)
+    const updates: Array<{ tile: HTMLElement; rowSpan: number }> = []
 
-    root.querySelectorAll<HTMLElement>('.photoTile').forEach((tile) => {
-      const image = tile.querySelector<HTMLImageElement>('img')
-      const width = tile.getBoundingClientRect().width
+    tiles.forEach((item) => {
+      const image = item.querySelector<HTMLImageElement>('img')
+      const width = item.getBoundingClientRect().width
       if (!image || !width) return
       const ratio = image.naturalWidth > 0 ? image.naturalHeight / image.naturalWidth : 1
       const rowSpan = Math.ceil(((width * ratio) + rowGap) / (rowHeight + rowGap))
-      tile.style.gridRowEnd = `span ${Math.max(1, rowSpan)}`
+      updates.push({ tile: item, rowSpan: Math.max(1, rowSpan) })
+    })
+    updates.forEach(({ tile: item, rowSpan }) => {
+      item.style.gridRowEnd = `span ${rowSpan}`
     })
     schedulePageBar()
   })
 }
 
-function markLoaded(photoKey: string) {
-  const next = new Set(loadedPhotos.value)
-  next.add(photoKey)
-  loadedPhotos.value = next
-  scheduleMasonryLayout()
+function markLoaded(photoKey: string, event: Event) {
+  loadedPhotos.value.add(photoKey)
+  const image = event.currentTarget
+  const tile = image instanceof HTMLImageElement
+    ? image.closest<HTMLElement>('.photoTile')
+    : null
+  scheduleMasonryLayout(tile)
 }
 
 function openPhoto(photoKey: string) {
@@ -681,7 +715,6 @@ let pageBarTrackH = 0
 let pageBarFrame: number | null = null
 let pageBarDragStartY = 0
 let pageBarDragStartScroll = 0
-let pageBodyObserver: ResizeObserver | null = null
 
 function updatePageBar() {
   const doc = document.documentElement
@@ -758,8 +791,6 @@ onMounted(async () => {
   loadPhotos()
   window.addEventListener('scroll', schedulePageBar, { passive: true })
   window.addEventListener('resize', schedulePageBar)
-  pageBodyObserver = new ResizeObserver(schedulePageBar)
-  pageBodyObserver.observe(document.body)
   schedulePageBar()
   accessCode.value = await restoreAdminAccess()
   window.addEventListener('keydown', handleKeydown)
@@ -772,8 +803,8 @@ onBeforeUnmount(() => {
   window.removeEventListener('keydown', handleKeydown)
   window.removeEventListener('scroll', schedulePageBar)
   window.removeEventListener('resize', schedulePageBar)
-  pageBodyObserver?.disconnect()
   if (pageBarFrame !== null) cancelAnimationFrame(pageBarFrame)
+  pendingMasonryTiles.clear()
   handleThumbUp()
   document.documentElement.style.removeProperty('overflow')
   if (toastTimer !== null) window.clearTimeout(toastTimer)
@@ -949,6 +980,9 @@ onBeforeUnmount(() => {
   display: block;
   grid-row-end: span 220;
   background: var(--module_dock_inactive_bg);
+}
+
+.photoTile.has-entry-animation {
   animation: photoReveal 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
   animation-delay: calc(var(--photo-index) * 45ms);
 }
@@ -1156,6 +1190,9 @@ onBeforeUnmount(() => {
   inset: 0;
   background: linear-gradient(100deg, var(--module_dock_inactive_bg) 20%, var(--item_hover_color) 45%, var(--module_dock_inactive_bg) 70%);
   background-size: 220% 100%;
+}
+
+.photoTileSkeleton.is-animated {
   animation: photoShimmer 1.4s ease-in-out infinite;
 }
 

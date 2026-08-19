@@ -67,10 +67,11 @@ function revealSun() {
 }
 
 onMounted(() => {
-  now.value = new Date()
-  timer = window.setInterval(() => {
+  const updateClock = () => {
     now.value = new Date()
-  }, 1000)
+    timer = window.setTimeout(updateClock, 60_000 - (Date.now() % 60_000))
+  }
+  updateClock()
 
   if ('IntersectionObserver' in window && timeModuleRef.value) {
     observer = new IntersectionObserver(([entry]) => {
@@ -83,7 +84,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
-  if (timer !== null) window.clearInterval(timer)
+  if (timer !== null) window.clearTimeout(timer)
   if (observer) observer.disconnect()
   if (revealStartFrame !== null) window.cancelAnimationFrame(revealStartFrame)
   if (revealFrame !== null) window.cancelAnimationFrame(revealFrame)

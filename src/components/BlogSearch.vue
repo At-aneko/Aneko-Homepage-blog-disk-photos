@@ -108,8 +108,7 @@ const results = computed(() => {
   const normalizedQuery = query.value.toLocaleLowerCase('zh-CN')
   if (!normalizedQuery) return posts.value.slice(0, 5)
 
-  return posts.value.filter((post) => [post.title, post.description, ...post.tags]
-    .some((value) => value.toLocaleLowerCase('zh-CN').includes(normalizedQuery)))
+  return posts.value.filter((post) => post.searchText.includes(normalizedQuery))
 })
 
 async function loadIndex() {
@@ -118,7 +117,14 @@ async function loadIndex() {
   try {
     const response = await fetch('/api/search.json')
     if (!response.ok) throw new Error(`Search index returned ${response.status}`)
-    posts.value = await response.json()
+    const payload = await response.json()
+    posts.value = (Array.isArray(payload) ? payload : []).map((post) => ({
+      ...post,
+      searchText: [post.title, post.description, ...(Array.isArray(post.tags) ? post.tags : [])]
+        .filter((value) => typeof value === 'string')
+        .join('\n')
+        .toLocaleLowerCase('zh-CN'),
+    }))
     status.value = 'ready'
   } catch {
     status.value = 'error'
@@ -132,10 +138,10 @@ function formatDate(date) {
 watch(() => props.open, async (isOpen) => {
   document.body.style.overflow = isOpen ? 'hidden' : ''
   if (!isOpen) return
-  if (status.value === 'idle') await loadIndex()
+  if (status.value === 'idle') void loadIndex()
   await nextTick()
   inputRef.value?.focus()
-})
+}, { immediate: true })
 
 onBeforeUnmount(() => {
   document.body.style.overflow = ''
